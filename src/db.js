@@ -1,6 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+let Database;
+try {
+  Database = require('better-sqlite3');
+} catch (error) {
+  console.error('better-sqlite3 yüklenemedi. Node.js 20/22 LTS kullandığınızdan emin olun ve npm install komutunu tekrar çalıştırın.');
+  process.exit(1);
+}
 
 const dbDirectory = path.join(__dirname, '..', 'data');
 fs.mkdirSync(dbDirectory, { recursive: true });
