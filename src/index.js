@@ -2,6 +2,12 @@ const { Client, GatewayIntentBits, ChannelType, Events, EmbedBuilder, ActionRowB
 const { config } = require('dotenv');
 config();
 
+const discordToken = process.env.DISCORD_TOKEN?.trim();
+if (!discordToken || discordToken === 'your_discord_bot_token_here') {
+  console.error('DISCORD_TOKEN bulunamadı. Proje klasöründeki .env dosyasını doldurun.');
+  process.exit(1);
+}
+
 const {
   getLogDefinitions,
   ensureGuildDefaults,
@@ -37,7 +43,7 @@ const client = new Client({
 
 const PREFIX = '.';
 const LOG_DEFINITIONS = getLogDefinitions();
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+const rest = new REST({ version: '10' }).setToken(discordToken);
 const inviteSnapshots = new Map();
 const inviteTotals = new Map();
 
@@ -1656,7 +1662,7 @@ client.on(Events.GuildStickerDelete, async (sticker) => {
   await sendLog(sticker.guild.id, 'guild', embed);
 });
 
-client.login(process.env.DISCORD_TOKEN).catch((error) => {
+client.login(discordToken).catch((error) => {
   console.error('Bot giriş başarısız:', error.message);
   process.exit(1);
 });
