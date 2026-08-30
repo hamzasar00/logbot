@@ -966,15 +966,23 @@ async function handleHelpCommand(message) {
 }
 
 client.on(Events.ClientReady, async () => {
-  console.log(`Bot giriş yaptı: ${client.user.tag}`);
+  client.user.setPresence({
+    status: 'online',
+    activities: [{ name: 'sunucuyu izliyor', type: 3 }],
+  });
+  console.log(`Bot aktif: ${client.user.tag} | Sunucu sayısı: ${client.guilds.cache.size}`);
 
   for (const guild of client.guilds.cache.values()) {
-    await updateGuildInviteSnapshot(guild);
-    restorePrivateRoomOwners(guild);
-    await ensureRoomMenu(guild);
+    try {
+      await updateGuildInviteSnapshot(guild);
+      restorePrivateRoomOwners(guild);
+      await ensureRoomMenu(guild);
+    } catch (error) {
+      console.error(`[${guild.name}] başlangıç ayarı tamamlanamadı:`, error.message);
+    }
   }
 
-  await deleteOldDiscordCommands();
+  console.log('Discord bağlantısı hazır. Prefix komutları kullanılabilir.');
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -1789,6 +1797,26 @@ client.on(Events.GuildStickerDelete, async (sticker) => {
     );
 
   await sendLog(sticker.guild.id, 'guild', embed);
+});
+
+client.on('error', (error) => {
+  console.error('Discord istemci hatası:', error.message);
+});
+
+client.on('warn', (message) => {
+  console.warn('Discord uyarısı:', message);
+});
+
+client.on('shardDisconnect', (closeEvent, shardId) => {
+  console.error(`Discord bağlantısı koptu (shard ${shardId}). Kod: ${closeEvent?.code ?? 'bilinmiyor'}`);
+});
+
+client.on('shardReconnecting', (shardId) => {
+  console.warn(`Discord bağlantısı yeniden kuruluyor (shard ${shardId})...`);
+});
+
+client.on('invalidated', () => {
+  console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
 });
 
 client.login(discordToken).catch((error) => {
