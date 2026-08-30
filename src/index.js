@@ -651,7 +651,7 @@ async function ensureRoleMenuInternal(guild) {
     }
 
     const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
-    const existingMenu = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '🎭 Rol Menüsü');
+    const existingMenu = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '👥 Rol Seçim Menüsü');
     if (existingMenu) {
       await existingMenu.edit({
         embeds: [buildStaticRoleMenuEmbed(guild.id)],
