@@ -681,19 +681,6 @@ async function handleRoomCreateModal(interaction) {
   const safeLimit = Number.isInteger(userLimit) && userLimit > 0 && userLimit <= 99 ? userLimit : 0;
 
   try {
-    const roomCategoryName = 'ÖZEL ODA LAR';
-    let roomCategory = interaction.guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildCategory && channel.name === roomCategoryName
-    );
-
-    if (!roomCategory) {
-      roomCategory = await interaction.guild.channels.create({
-        name: roomCategoryName,
-        type: ChannelType.GuildCategory,
-        reason: 'Özel oda kategorisi oluşturuluyor.',
-      });
-    }
-
     const savedRoomCategoryId = getCategoryId(interaction.guild.id, 'room');
     const savedRoomCategory = savedRoomCategoryId ? interaction.guild.channels.cache.get(savedRoomCategoryId) : null;
     let roomCategory = savedRoomCategory?.type === ChannelType.GuildCategory ? savedRoomCategory : interaction.guild.channels.cache.find(
@@ -730,6 +717,8 @@ async function handleRoomCreateModal(interaction) {
       ],
       reason: `${interaction.user.tag} özel ses odası oluşturdu.`,
     };
+
+    // Mevcut kategori varsa kullan; yoksa kanalı kök seviyede oluştur. Yeni kategori açma.
     if (roomCategory) {
       roomOptions.parent = roomCategory.id;
     }
