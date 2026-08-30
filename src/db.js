@@ -4,7 +4,7 @@ let Database;
 try {
   Database = require('better-sqlite3');
 } catch (error) {
-  console.error('better-sqlite3 yüklenemedi. Node.js 20/22 LTS kullandığınızdan emin olun ve npm install komutunu tekrar çalıştırın.');
+  console.error('better-sqlite3 yüklenemedi. Node.js 22/24 LTS kullandığınızdan emin olun ve npm install komutunu tekrar çalıştırın.');
   process.exit(1);
 }
 
