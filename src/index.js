@@ -46,6 +46,22 @@ const LOG_DEFINITIONS = getLogDefinitions();
 const rest = new REST({ version: '10' }).setToken(discordToken);
 const inviteSnapshots = new Map();
 const inviteTotals = new Map();
+const inFlightGuildTasks = new Map();
+
+function runGuildTaskOnce(taskKey, task) {
+  const activeTask = inFlightGuildTasks.get(taskKey);
+  if (activeTask) {
+    return activeTask;
+  }
+
+  const currentTask = Promise.resolve().then(task);
+  inFlightGuildTasks.set(taskKey, currentTask);
+  currentTask.then(
+    () => { if (inFlightGuildTasks.get(taskKey) === currentTask) inFlightGuildTasks.delete(taskKey); },
+    () => { if (inFlightGuildTasks.get(taskKey) === currentTask) inFlightGuildTasks.delete(taskKey); }
+  );
+  return currentTask;
+}
 
 function getGuildInviteTotals(guildId) {
   if (!inviteTotals.has(guildId)) {
@@ -265,7 +281,7 @@ async function getAuditLogInfo(guild, targetId, eventTypes) {
   return { executor: 'Bilinmeyen', reason: 'Sebep belirtilmedi' };
 }
 
-async function ensureSetup(guild) {
+async function ensureSetupInternal(guild) {
   if (!guild) {
     return;
   }
@@ -323,6 +339,11 @@ async function ensureSetup(guild) {
 
     saveLogChannel(guild.id, group.key, channel.id);
   }
+}
+
+async function ensureSetup(guild) {
+  if (!guild) return;
+  return runGuildTaskOnce(`setup:${guild.id}`, () => ensureSetupInternal(guild));
 }
 
 async function handleSetupCommand(message) {
@@ -518,7 +539,7 @@ function buildRoomMenuComponents() {
   ];
 }
 
-async function ensureRoomMenu(guild) {
+async function ensureRoomMenuInternal(guild) {
   if (!guild) {
     return;
   }
@@ -573,20 +594,24 @@ async function ensureRoomMenu(guild) {
   }
 }
 
-async function ensureRoleMenu(guild) {
+async function ensureRoomMenu(guild) {
+  if (!guild) return;
+  return runGuildTaskOnce(`room-menu:${guild.id}`, () => ensureRoomMenuInternal(guild));
+}
+
+async function ensureRoleMenuInternal(guild) {
   if (!guild) {
     return;
   }
 
   const roleMenuInfo = getRoleMenuMessage(guild.id);
-  
+
   try {
     if (roleMenuInfo) {
       const channel = guild.channels.cache.get(roleMenuInfo.channelId);
       if (channel && channel.type === ChannelType.GuildText) {
         const message = await channel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
         if (message) {
-          // Menüyü güncelle
           await message.edit({
             embeds: [buildStaticRoleMenuEmbed(guild.id)],
             components: buildRoleMenuComponents(guild.id),
@@ -596,7 +621,6 @@ async function ensureRoleMenu(guild) {
       }
     }
 
-    // Yeni menü oluştur; önce veritabanındaki kategori kimliğini kullan.
     const savedRoleCategoryId = getCategoryId(guild.id, 'role');
     const savedRoleCategory = savedRoleCategoryId ? guild.channels.cache.get(savedRoleCategoryId) : null;
     let roleCategory = savedRoleCategory?.type === ChannelType.GuildCategory ? savedRoleCategory : guild.channels.cache.find(
@@ -626,6 +650,17 @@ async function ensureRoleMenu(guild) {
       });
     }
 
+    const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
+    const existingMenu = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '🎭 Rol Menüsü');
+    if (existingMenu) {
+      await existingMenu.edit({
+        embeds: [buildStaticRoleMenuEmbed(guild.id)],
+        components: buildRoleMenuComponents(guild.id),
+      });
+      saveRoleMenuMessage(guild.id, roleChannel.id, existingMenu.id);
+      return;
+    }
+
     const newMessage = await roleChannel.send({
       embeds: [buildStaticRoleMenuEmbed(guild.id)],
       components: buildRoleMenuComponents(guild.id),
@@ -634,6 +669,47 @@ async function ensureRoleMenu(guild) {
     saveRoleMenuMessage(guild.id, roleChannel.id, newMessage.id);
   } catch (error) {
     console.error('Rol menüsü oluşturma hatası:', error);
+  }
+}
+
+async function ensureRoleMenu(guild) {
+  if (!guild) return;
+  return runGuildTaskOnce(`role-menu:${guild.id}`, () => ensureRoleMenuInternal(guild));
+}
+
+function getRoomOwnerMap() {
+  if (!globalThis.roomOwnerMap) {
+    globalThis.roomOwnerMap = new Map();
+  }
+  return globalThis.roomOwnerMap;
+}
+
+function getPrivateRoomOwnerId(channel) {
+  if (!channel || channel.type !== ChannelType.GuildVoice || !channel.guild) {
+    return null;
+  }
+
+  const everyoneOverwrite = channel.permissionOverwrites.cache.get(channel.guild.roles.everyone.id);
+  if (!everyoneOverwrite?.deny.has(PermissionsBitField.Flags.Connect)) {
+    return null;
+  }
+
+  const ownerOverwrite = channel.permissionOverwrites.cache.find((overwrite) =>
+    overwrite.id !== channel.guild.roles.everyone.id &&
+    channel.guild.members.cache.has(overwrite.id) &&
+    overwrite.allow.has(PermissionsBitField.Flags.Connect) &&
+    overwrite.allow.has(PermissionsBitField.Flags.ViewChannel)
+  );
+  return ownerOverwrite?.id || null;
+}
+
+function restorePrivateRoomOwners(guild) {
+  const roomOwnerMap = getRoomOwnerMap();
+  for (const channel of guild.channels.cache.values()) {
+    const ownerId = getPrivateRoomOwnerId(channel);
+    if (ownerId) {
+      roomOwnerMap.set(channel.id, { ownerId, channelId: channel.id, guildId: guild.id, roomName: channel.name });
+    }
   }
 }
 
@@ -681,6 +757,14 @@ async function handleRoomCreateModal(interaction) {
   const safeLimit = Number.isInteger(userLimit) && userLimit > 0 && userLimit <= 99 ? userLimit : 0;
 
   try {
+    const roomOwnerMap = getRoomOwnerMap();
+    const existingRoom = interaction.guild.channels.cache.find((channel) => getPrivateRoomOwnerId(channel) === interaction.user.id);
+    if (existingRoom) {
+      roomOwnerMap.set(existingRoom.id, { ownerId: interaction.user.id, channelId: existingRoom.id, guildId: interaction.guild.id, roomName: existingRoom.name });
+      await interaction.reply({ content: `🎧 Zaten açık bir odan var: ${existingRoom}`, ephemeral: true });
+      return;
+    }
+
     const savedRoomCategoryId = getCategoryId(interaction.guild.id, 'room');
     const savedRoomCategory = savedRoomCategoryId ? interaction.guild.channels.cache.get(savedRoomCategoryId) : null;
     let roomCategory = savedRoomCategory?.type === ChannelType.GuildCategory ? savedRoomCategory : interaction.guild.channels.cache.find(
@@ -718,20 +802,13 @@ async function handleRoomCreateModal(interaction) {
       reason: `${interaction.user.tag} özel ses odası oluşturdu.`,
     };
 
-    // Mevcut kategori varsa kullan; yoksa kanalı kök seviyede oluştur. Yeni kategori açma.
     if (roomCategory) {
       roomOptions.parent = roomCategory.id;
     }
 
     const room = await interaction.guild.channels.create(roomOptions);
-    const ownerRoomKey = `${interaction.guild.id}:${interaction.user.id}`;
-    room.setName(`${finalName} · ${interaction.user.username}`);
-
-    if (!globalThis.roomOwnerMap) {
-      globalThis.roomOwnerMap = new Map();
-    }
-
-    globalThis.roomOwnerMap.set(room.id, { ownerId: interaction.user.id, channelId: room.id, guildId: interaction.guild.id, roomName: finalName });
+    await room.setName(`${finalName} · ${interaction.user.username}`);
+    roomOwnerMap.set(room.id, { ownerId: interaction.user.id, channelId: room.id, guildId: interaction.guild.id, roomName: finalName });
 
     await interaction.reply({ content: `🎧 Oda hazır: ${room}`, ephemeral: true });
   } catch (error) {
@@ -754,7 +831,7 @@ async function checkPrivateRoomAutoClose(oldState, newState) {
     globalThis.roomOwnerMap = new Map();
   }
 
-  const roomInfo = globalThis.roomOwnerMap.get(oldState.channelId || newState.channelId);
+  const roomInfo = getRoomOwnerMap().get(oldState.channelId || newState.channelId);
   if (!roomInfo) {
     return;
   }
@@ -893,6 +970,7 @@ client.on(Events.ClientReady, async () => {
 
   for (const guild of client.guilds.cache.values()) {
     await updateGuildInviteSnapshot(guild);
+    restorePrivateRoomOwners(guild);
     await ensureRoomMenu(guild);
   }
 
