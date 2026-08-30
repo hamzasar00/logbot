@@ -1,6 +1,6 @@
 # Discord Log Bot
 
-Bu proje, ayrı ayrı açılıp kapatılabilen, otomatik Discord log sistemi içerir.
+Bu proje, ayrı ayrı açılıp kapatılabilen otomatik Discord log sistemi içerir.
 
 ## Özellikler
 
@@ -11,31 +11,46 @@ Bu proje, ayrı ayrı açılıp kapatılabilen, otomatik Discord log sistemi iç
 - Tüm kullanıcı mesajları Türkçe olarak hazırlanır.
 - Prefix sadece `.` kullanılır.
 
-## Kurulum
+## Windows'ta kurulum
 
-1. Bağımlılıkları kur:
-   ```bash
-   npm install
-   ```
-2. `.env.example` dosyasını `.env` olarak kopyalayın:
-   ```bash
-   cp .env.example .env
-   ```
-3. `.env` dosyasına Discord bot bilgilerinizi yazın:
+> En sorunsuz seçenek Node.js **22 LTS veya 24 LTS** kullanmaktır. Bu proje Node.js 22-24 aralığını destekler.
+
+1. Projenin tamamını ZIP'ten çıkarın. ZIP dosyasının içindeki ZIP'i çalıştırmayın.
+2. [Node.js LTS](https://nodejs.org/) sürümünü kurun.
+3. Proje klasöründe **kurulum.bat** dosyasına çift tıklayın. Bu dosya bağımlılıkları kurar ve yoksa `.env` dosyasını oluşturur.
+4. Oluşan **.env** dosyasını Not Defteri ile açıp Discord bot bilgilerinizi yazın:
+
    ```env
    DISCORD_TOKEN=YOUR_BOT_TOKEN
    CLIENT_ID=YOUR_CLIENT_ID
    GUILD_ID=YOUR_TEST_GUILD_ID
    ```
-4. Botu başlatın:
-   ```bash
-   npm start
-   ```
+
+5. **baslat.bat** dosyasına çift tıklayın.
+
+### Komut satırından kurulum
+
+PowerShell veya Komut İstemi'nde proje klasöründe:
+
+```bash
+npm install
+copy .env.example .env
+npm start
+```
+
+PowerShell'de `copy` yerine `Copy-Item .env.example .env` kullanabilirsiniz.
 
 ## Komutlar
 
-- `.setup` → Tüm log kategorilerini ve kanallarını oluşturur.
+- `.setup` → Tüm log kategorilerini ve kanalları oluşturur.
 - `.log` → Log açık/kapalı kontrol panelini gösterir.
+
+## Sık karşılaşılan hatalar
+
+- **better-sqlite3 yüklenemedi:** Node.js 22 veya 24 LTS kurup proje klasöründe tekrar `npm install` çalıştırın.
+- **DISCORD_TOKEN bulunamadı:** Proje klasöründe `.env` dosyası olduğundan ve token satırının doldurulduğundan emin olun.
+- **Invalid token:** Discord Developer Portal'dan bot tokenını yenileyip `.env` içindeki değeri güncelleyin.
+- **Intent hatası:** Developer Portal > Bot > Privileged Gateway Intents bölümünde gerekli intentleri açın.
 
 ## Not
 
