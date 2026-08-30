@@ -273,9 +273,19 @@ async function ensureSetup(guild) {
   ensureGuildDefaults(guild.id);
 
   const mainCategoryName = 'LOGLAR';
-  let mainCategory = guild.channels.cache.find(
-    (channel) => channel.type === ChannelType.GuildCategory && channel.name === mainCategoryName
-  );
+  let mainCategory = null;
+  const savedMainCategoryId = getMainCategoryId(guild.id);
+  const savedMainCategory = savedMainCategoryId ? guild.channels.cache.get(savedMainCategoryId) : null;
+
+  if (savedMainCategory?.type === ChannelType.GuildCategory) {
+    mainCategory = savedMainCategory;
+  }
+
+  if (!mainCategory) {
+    mainCategory = guild.channels.cache.find(
+      (channel) => channel.type === ChannelType.GuildCategory && channel.name === mainCategoryName
+    );
+  }
 
   if (!mainCategory) {
     mainCategory = await guild.channels.create({
@@ -288,9 +298,19 @@ async function ensureSetup(guild) {
   saveMainCategoryId(guild.id, mainCategory.id);
 
   for (const group of Object.values(LOG_GROUPS)) {
-    let channel = guild.channels.cache.find(
-      (item) => item.parentId === mainCategory.id && item.name === group.channelName && item.type === ChannelType.GuildText
-    );
+    let channel = null;
+    const savedChannelId = getLogChannel(guild.id, group.key);
+    const savedChannel = savedChannelId ? guild.channels.cache.get(savedChannelId) : null;
+
+    if (savedChannel?.type === ChannelType.GuildText) {
+      channel = savedChannel;
+    }
+
+    if (!channel) {
+      channel = guild.channels.cache.find(
+        (item) => item.parentId === mainCategory.id && item.name === group.channelName && item.type === ChannelType.GuildText
+      );
+    }
 
     if (!channel) {
       channel = await guild.channels.create({
@@ -302,10 +322,8 @@ async function ensureSetup(guild) {
     }
 
     saveLogChannel(guild.id, group.key, channel.id);
-    setLogEnabled(guild.id, group.key, group.defaultEnabled);
   }
 }
-
 
 async function handleSetupCommand(message) {
   if (!message.guild) {
@@ -506,32 +524,49 @@ async function ensureRoomMenu(guild) {
   }
 
   const roomCategoryName = 'ÖZEL ODA LAR';
-  let roomCategory = guild.channels.cache.find(
-    (channel) => channel.type === ChannelType.GuildCategory && channel.name === roomCategoryName
-  );
+  let roomCategory = null;
+  const savedRoomCategoryId = getCategoryId(guild.id, 'room');
+  const savedRoomCategory = savedRoomCategoryId ? guild.channels.cache.get(savedRoomCategoryId) : null;
 
-  if (!roomCategory) {
-    roomCategory = await guild.channels.create({
-      name: roomCategoryName,
-      type: ChannelType.GuildCategory,
-      reason: 'Özel oda menüsü için kategori oluşturuluyor.',
-    });
+  if (savedRoomCategory?.type === ChannelType.GuildCategory) {
+    roomCategory = savedRoomCategory;
   }
 
+  if (!roomCategory) {
+    roomCategory = guild.channels.cache.find(
+      (channel) => channel.type === ChannelType.GuildCategory && channel.name === roomCategoryName
+    );
+  }
+
+  if (roomCategory) {
+    saveCategoryId(guild.id, 'room', roomCategory.id);
+  }
+
+  const savedMainCategoryId = getMainCategoryId(guild.id);
+  const mainCategory = savedMainCategoryId ? guild.channels.cache.get(savedMainCategoryId) : guild.channels.cache.find(
+    (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'LOGLAR'
+  );
+  const parentCategory = roomCategory || (mainCategory?.type === ChannelType.GuildCategory ? mainCategory : null);
+
+  // Var olan oda-menusu nerede olursa olsun tekrar oluşturma; yoksa mevcut ana kategoriye koy.
   let roomChannel = guild.channels.cache.find(
-    (channel) => channel.type === ChannelType.GuildText && channel.parentId === roomCategory.id && channel.name === 'oda-menusu'
+    (channel) => channel.type === ChannelType.GuildText && channel.name === 'oda-menusu'
   );
 
   if (!roomChannel) {
-    roomChannel = await guild.channels.create({
+    const channelOptions = {
       name: 'oda-menusu',
       type: ChannelType.GuildText,
-      parent: roomCategory.id,
       reason: 'Özel oda oluşturma menüsü oluşturuluyor.',
-    });
+    };
+    if (parentCategory) {
+      channelOptions.parent = parentCategory.id;
+    }
+    roomChannel = await guild.channels.create(channelOptions);
   }
 
-  const existingMessage = roomChannel.messages.cache.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '🎧 Özel Oda Oluşturma');
+  const messages = await roomChannel.messages.fetch({ limit: 50 }).catch(() => null);
+  const existingMessage = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '🎧 Özel Oda Oluşturma');
 
   if (!existingMessage) {
     await roomChannel.send({ embeds: [buildRoomMenuEmbed()], components: buildRoomMenuComponents() });
@@ -561,8 +596,10 @@ async function ensureRoleMenu(guild) {
       }
     }
 
-    // Yeni menü oluştur
-    let roleCategory = guild.channels.cache.find(
+    // Yeni menü oluştur; önce veritabanındaki kategori kimliğini kullan.
+    const savedRoleCategoryId = getCategoryId(guild.id, 'role');
+    const savedRoleCategory = savedRoleCategoryId ? guild.channels.cache.get(savedRoleCategoryId) : null;
+    let roleCategory = savedRoleCategory?.type === ChannelType.GuildCategory ? savedRoleCategory : guild.channels.cache.find(
       (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'ROLLER'
     );
 
@@ -573,6 +610,8 @@ async function ensureRoleMenu(guild) {
         reason: 'Rol menüsü için kategori oluşturuluyor.',
       });
     }
+
+    saveCategoryId(guild.id, 'role', roleCategory.id);
 
     let roleChannel = guild.channels.cache.find(
       (channel) => channel.type === ChannelType.GuildText && channel.parentId === roleCategory.id && channel.name === 'rol-menusu'
@@ -655,10 +694,29 @@ async function handleRoomCreateModal(interaction) {
       });
     }
 
-    const room = await interaction.guild.channels.create({
+    const savedRoomCategoryId = getCategoryId(interaction.guild.id, 'room');
+    const savedRoomCategory = savedRoomCategoryId ? interaction.guild.channels.cache.get(savedRoomCategoryId) : null;
+    let roomCategory = savedRoomCategory?.type === ChannelType.GuildCategory ? savedRoomCategory : interaction.guild.channels.cache.find(
+      (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'ÖZEL ODA LAR'
+    );
+
+    if (!roomCategory) {
+      const roomMenu = interaction.guild.channels.cache.find(
+        (channel) => channel.type === ChannelType.GuildText && channel.name === 'oda-menusu'
+      );
+      const menuParent = roomMenu?.parent;
+      if (menuParent?.type === ChannelType.GuildCategory) {
+        roomCategory = menuParent;
+      }
+    }
+
+    if (roomCategory) {
+      saveCategoryId(interaction.guild.id, 'room', roomCategory.id);
+    }
+
+    const roomOptions = {
       name: finalName,
       type: ChannelType.GuildVoice,
-      parent: roomCategory.id,
       userLimit: safeLimit,
       permissionOverwrites: [
         {
@@ -671,8 +729,12 @@ async function handleRoomCreateModal(interaction) {
         },
       ],
       reason: `${interaction.user.tag} özel ses odası oluşturdu.`,
-    });
+    };
+    if (roomCategory) {
+      roomOptions.parent = roomCategory.id;
+    }
 
+    const room = await interaction.guild.channels.create(roomOptions);
     const ownerRoomKey = `${interaction.guild.id}:${interaction.user.id}`;
     room.setName(`${finalName} · ${interaction.user.username}`);
 
