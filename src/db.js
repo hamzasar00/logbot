@@ -1,17 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-let Database;
-try {
-  Database = require('better-sqlite3');
-} catch (error) {
-  console.error('better-sqlite3 yüklenemedi. Node.js 22/24 LTS kullandığınızdan emin olun ve npm install komutunu tekrar çalıştırın.');
-  process.exit(1);
-}
 
-const dbDirectory = path.join(__dirname, '..', 'data');
-fs.mkdirSync(dbDirectory, { recursive: true });
+const dataDirectory = path.join(__dirname, '..', 'data');
+const dataFile = path.join(dataDirectory, 'bot-data.json');
 
-const db = new Database(path.join(dbDirectory, 'bot.db'));
+fs.mkdirSync(dataDirectory, { recursive: true });
 
 const LOG_GROUPS = Object.freeze({
   member: { key: 'member', label: 'Üye Log', channelName: 'uye-log', defaultEnabled: true },
@@ -23,109 +16,111 @@ const LOG_GROUPS = Object.freeze({
   guild: { key: 'guild', label: 'Sunucu Log', channelName: 'sunucu-log', defaultEnabled: true },
 });
 
+function createEmptyState() {
+  return {
+    version: 1,
+    guild_log_settings: {},
+    guild_log_channels: {},
+    guild_setup: {},
+    guild_category_ids: {},
+    guild_roles: {},
+    role_menu_storage: {},
+  };
+}
+
+function normalizeState(value) {
+  const emptyState = createEmptyState();
+  const source = value && typeof value === 'object' ? value : {};
+  for (const key of Object.keys(emptyState)) {
+    if (key === 'version') continue;
+    if (!source[key] || typeof source[key] !== 'object' || Array.isArray(source[key])) {
+      source[key] = emptyState[key];
+    }
+  }
+  source.version = 1;
+  return source;
+}
+
+let state = createEmptyState();
+
+function loadState() {
+  try {
+    if (fs.existsSync(dataFile)) {
+      state = normalizeState(JSON.parse(fs.readFileSync(dataFile, 'utf8')));
+    }
+  } catch (error) {
+    console.error('Veritabanı dosyası okunamadı, temiz ayarlarla devam ediliyor:', error.message);
+    state = createEmptyState();
+  }
+}
+
+function saveState() {
+  fs.writeFileSync(dataFile, JSON.stringify(state, null, 2), 'utf8');
+}
+
 function initDatabase() {
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guild_log_settings (
-      guild_id TEXT NOT NULL,
-      log_key TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      PRIMARY KEY (guild_id, log_key)
-    )
-  `).run();
-
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guild_log_channels (
-      guild_id TEXT NOT NULL,
-      log_key TEXT NOT NULL,
-      channel_id TEXT NOT NULL,
-      PRIMARY KEY (guild_id, log_key)
-    )
-  `).run();
-
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guild_setup (
-      guild_id TEXT PRIMARY KEY,
-      main_category_id TEXT,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `).run();
-
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guild_category_ids (
-      guild_id TEXT NOT NULL,
-      category_name TEXT NOT NULL,
-      category_id TEXT NOT NULL,
-      PRIMARY KEY (guild_id, category_name)
-    )
-  `).run();
-
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS guild_roles (
-      guild_id TEXT NOT NULL,
-      role_id TEXT NOT NULL,
-      emoji TEXT NOT NULL,
-      PRIMARY KEY (guild_id, role_id)
-    )
-  `).run();
-
-  db.prepare(`
-    CREATE TABLE IF NOT EXISTS role_menu_storage (
-      guild_id TEXT PRIMARY KEY,
-      channel_id TEXT NOT NULL,
-      message_id TEXT NOT NULL
-    )
-  `).run();
+  loadState();
+  saveState();
 }
 
 function ensureGuildDefaults(guildId) {
-  const existing = Object.keys(LOG_GROUPS);
-  for (const key of existing) {
-    const row = db.prepare('SELECT 1 FROM guild_log_settings WHERE guild_id = ? AND log_key = ?').get(guildId, key);
-    if (!row) {
-      db.prepare('INSERT INTO guild_log_settings (guild_id, log_key, enabled) VALUES (?, ?, ?)').run(guildId, key, LOG_GROUPS[key].defaultEnabled ? 1 : 0);
+  if (!state.guild_log_settings[guildId]) {
+    state.guild_log_settings[guildId] = {};
+  }
+
+  let changed = false;
+  for (const key of Object.keys(LOG_GROUPS)) {
+    if (typeof state.guild_log_settings[guildId][key] !== 'boolean') {
+      state.guild_log_settings[guildId][key] = Boolean(LOG_GROUPS[key].defaultEnabled);
+      changed = true;
     }
   }
+
+  if (changed) saveState();
 }
 
 function setLogEnabled(guildId, logKey, enabled) {
-  db.prepare('INSERT INTO guild_log_settings (guild_id, log_key, enabled) VALUES (?, ?, ?) ON CONFLICT(guild_id, log_key) DO UPDATE SET enabled = excluded.enabled').run(guildId, logKey, enabled ? 1 : 0);
+  ensureGuildDefaults(guildId);
+  state.guild_log_settings[guildId][logKey] = Boolean(enabled);
+  saveState();
 }
 
 function isLogEnabled(guildId, logKey) {
-  const row = db.prepare('SELECT enabled FROM guild_log_settings WHERE guild_id = ? AND log_key = ?').get(guildId, logKey);
-  if (!row) {
-    ensureGuildDefaults(guildId);
-    const fallback = db.prepare('SELECT enabled FROM guild_log_settings WHERE guild_id = ? AND log_key = ?').get(guildId, logKey);
-    return fallback ? Boolean(fallback.enabled) : true;
-  }
-  return Boolean(row.enabled);
+  ensureGuildDefaults(guildId);
+  return state.guild_log_settings[guildId][logKey] !== false;
 }
 
 function saveLogChannel(guildId, logKey, channelId) {
-  db.prepare('INSERT INTO guild_log_channels (guild_id, log_key, channel_id) VALUES (?, ?, ?) ON CONFLICT(guild_id, log_key) DO UPDATE SET channel_id = excluded.channel_id').run(guildId, logKey, channelId);
+  if (!state.guild_log_channels[guildId]) state.guild_log_channels[guildId] = {};
+  state.guild_log_channels[guildId][logKey] = channelId;
+  saveState();
 }
 
 function getLogChannel(guildId, logKey) {
-  const row = db.prepare('SELECT channel_id FROM guild_log_channels WHERE guild_id = ? AND log_key = ?').get(guildId, logKey);
-  return row ? row.channel_id : null;
+  return state.guild_log_channels[guildId]?.[logKey] || null;
 }
 
 function saveMainCategoryId(guildId, categoryId) {
-  db.prepare("INSERT INTO guild_setup (guild_id, main_category_id, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(guild_id) DO UPDATE SET main_category_id = excluded.main_category_id, updated_at = datetime('now')").run(guildId, categoryId);
+  state.guild_setup[guildId] = {
+    ...(state.guild_setup[guildId] || {}),
+    main_category_id: categoryId,
+    updated_at: new Date().toISOString(),
+  };
+  saveState();
 }
 
 function saveCategoryId(guildId, categoryName, categoryId) {
-  db.prepare('INSERT INTO guild_category_ids (guild_id, category_name, category_id) VALUES (?, ?, ?) ON CONFLICT(guild_id, category_name) DO UPDATE SET category_id = excluded.category_id').run(guildId, categoryName, categoryId);
+  if (!state.guild_category_ids[guildId]) state.guild_category_ids[guildId] = {};
+  state.guild_category_ids[guildId][categoryName] = categoryId;
+  saveState();
 }
 
 function getMainCategoryId(guildId) {
-  const row = db.prepare('SELECT main_category_id FROM guild_setup WHERE guild_id = ?').get(guildId);
-  return row ? row.main_category_id : null;
+  return state.guild_setup[guildId]?.main_category_id || null;
 }
 
 function getCategoryId(guildId, categoryName) {
-  const row = db.prepare('SELECT category_id FROM guild_category_ids WHERE guild_id = ? AND category_name = ?').get(guildId, categoryName);
-  return row ? row.category_id : null;
+  return state.guild_category_ids[guildId]?.[categoryName] || null;
 }
 
 function getLogDefinitions() {
@@ -133,30 +128,35 @@ function getLogDefinitions() {
 }
 
 function addRoleToMenu(guildId, roleId, emoji) {
-  db.prepare('INSERT INTO guild_roles (guild_id, role_id, emoji) VALUES (?, ?, ?) ON CONFLICT(guild_id, role_id) DO UPDATE SET emoji = excluded.emoji').run(guildId, roleId, emoji);
+  if (!state.guild_roles[guildId]) state.guild_roles[guildId] = {};
+  state.guild_roles[guildId][roleId] = emoji;
+  saveState();
 }
 
 function removeRoleFromMenu(guildId, roleId) {
-  db.prepare('DELETE FROM guild_roles WHERE guild_id = ? AND role_id = ?').run(guildId, roleId);
+  if (!state.guild_roles[guildId]) return;
+  delete state.guild_roles[guildId][roleId];
+  saveState();
 }
 
 function getMenuRoles(guildId) {
-  const rows = db.prepare('SELECT role_id, emoji FROM guild_roles WHERE guild_id = ? ORDER BY role_id').all(guildId);
-  return rows || [];
+  return Object.entries(state.guild_roles[guildId] || {})
+    .sort(([first], [second]) => first.localeCompare(second))
+    .map(([role_id, emoji]) => ({ role_id, emoji }));
 }
 
 function getRoleEmoji(guildId, roleId) {
-  const row = db.prepare('SELECT emoji FROM guild_roles WHERE guild_id = ? AND role_id = ?').get(guildId, roleId);
-  return row ? row.emoji : null;
+  return state.guild_roles[guildId]?.[roleId] || null;
 }
 
 function saveRoleMenuMessage(guildId, channelId, messageId) {
-  db.prepare('INSERT INTO role_menu_storage (guild_id, channel_id, message_id) VALUES (?, ?, ?) ON CONFLICT(guild_id) DO UPDATE SET channel_id = excluded.channel_id, message_id = excluded.message_id').run(guildId, channelId, messageId);
+  state.role_menu_storage[guildId] = { channel_id: channelId, message_id: messageId };
+  saveState();
 }
 
 function getRoleMenuMessage(guildId) {
-  const row = db.prepare('SELECT channel_id, message_id FROM role_menu_storage WHERE guild_id = ?').get(guildId);
-  return row ? { channelId: row.channel_id, messageId: row.message_id } : null;
+  const value = state.role_menu_storage[guildId];
+  return value ? { channelId: value.channel_id, messageId: value.message_id } : null;
 }
 
 initDatabase();
