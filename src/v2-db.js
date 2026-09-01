@@ -26,7 +26,7 @@ function createGuildDefaults() {
       includeBots: false,
     },
     rooms: { transferredOwners: {} },
-    stats: { enabled: false, messages: 0, joins: 0, leaves: 0, voiceMinutes: 0, days: {} },
+    stats: { enabled: false, messages: 0, joins: 0, leaves: 0, voiceMinutes: 0, days: {}, users: {} },
   };
 }
 
@@ -86,6 +86,16 @@ function normalizeGuild(value) {
   if (!isPlainObject(guild.stats)) guild.stats = {};
   guild.stats = mergeDefaults(guild.stats, defaults.stats);
   if (!isPlainObject(guild.stats.days)) guild.stats.days = {};
+  if (!isPlainObject(guild.stats.users)) guild.stats.users = {};
+  for (const [userId, value] of Object.entries(guild.stats.users)) {
+    if (!isPlainObject(value)) {
+      delete guild.stats.users[userId];
+      continue;
+    }
+    for (const key of ['messages', 'voiceMinutes', 'invites']) {
+      if (!Number.isFinite(value[key]) || value[key] < 0) value[key] = 0;
+    }
+  }
   for (const [day, value] of Object.entries(guild.stats.days)) {
     if (!isPlainObject(value)) {
       delete guild.stats.days[day];
@@ -171,15 +181,31 @@ function clearWarnings(guildId, userId) {
   return before - moderation.warnings.length;
 }
 
-function recordStat(guildId, key, amount = 1) {
+function recordStat(guildId, key, amount = 1, userId = null) {
   const stats = getGuild(guildId).stats;
   if (!stats.enabled) return;
   if (typeof stats[key] !== 'number') stats[key] = 0;
   stats[key] += amount;
+  if (userId && ['messages', 'voiceMinutes', 'invites'].includes(key)) {
+    if (!isPlainObject(stats.users[userId])) stats.users[userId] = { messages: 0, voiceMinutes: 0, invites: 0 };
+    if (typeof stats.users[userId][key] !== 'number') stats.users[userId][key] = 0;
+    stats.users[userId][key] += amount;
+  }
   const day = new Date().toISOString().slice(0, 10);
   if (!stats.days[day] || typeof stats.days[day] !== 'object') stats.days[day] = { messages: 0, joins: 0, leaves: 0, voiceMinutes: 0 };
   if (typeof stats.days[day][key] !== 'number') stats.days[day][key] = 0;
   stats.days[day][key] += amount;
+}
+
+function getLeaderboard(guildId, key = 'messages', limit = 10) {
+  if (!['messages', 'voiceMinutes', 'invites'].includes(key)) return [];
+  const stats = getGuild(guildId).stats;
+  const safeLimit = Math.min(10, Math.max(1, Number.isInteger(limit) ? limit : 10));
+  return Object.entries(stats.users)
+    .map(([userId, values]) => ({ userId, value: Number(values[key]) || 0 }))
+    .filter((entry) => entry.value > 0)
+    .sort((first, second) => second.value - first.value || first.userId.localeCompare(second.userId))
+    .slice(0, safeLimit);
 }
 
 function getStats(guildId, days = 7) {
@@ -194,4 +220,4 @@ function getStats(guildId, days = 7) {
 loadState();
 saveState();
 
-module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getStats, saveState };
+module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, saveState };
