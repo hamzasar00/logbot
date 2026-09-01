@@ -853,7 +853,7 @@ async function checkPrivateRoomAutoClose(oldState, newState) {
   }
 
   const ownerStillInRoom = members.has(roomInfo.ownerId);
-  if (!ownerStillInRoom && members.size === 0) {
+  if (!ownerStillInRoom) {
     try {
       await channel.delete(`Özel oda sahibinin odadan ayrılması nedeniyle kapatıldı.`);
       globalThis.roomOwnerMap.delete(roomInfo.channelId);
@@ -1255,9 +1255,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     const selectedChannelId = interaction.channels.first()?.id ?? null;
-    if (selectedChannelId) {
-      saveLogChannel(guild.id, logKey, selectedChannelId);
-    }
+    saveLogChannel(guild.id, logKey, selectedChannelId);
 
     const updatedEmbed = buildLogPanel(guild.id);
     const updatedButtons = [
