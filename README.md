@@ -55,6 +55,38 @@ Windows Komut İstemi'nde `rm -rf node_modules` yerine `rmdir /s /q node_modules
 - **Intent hatası:** Developer Portal > Bot > Privileged Gateway Intents bölümünde gerekli intentleri açın.
 - **Eski better-sqlite3/node-gyp hatası:** Eski `node_modules` klasörünü silip `npm install` çalıştırın. Güncel sürümde bu native bağımlılık artık kullanılmıyor.
 
+## V2.0 Yeni Özellikler
+
+V2 geliştirmeleri mevcut prefix komutlarını kaldırmadan çalışır.
+
+### Moderasyon
+
+- `.uyar @kullanıcı sebep`, `.uyarilar @kullanıcı`, `.uyari-sil @kullanıcı`
+- `.filtre ac` veya `.filtre kapat` ile otomatik moderasyonu açıp kapatın.
+- `.filtre spam ac`, `.filtre link ac`, `.filtre caps ac`, `.filtre invite ac`
+- `.filtre kelime-ekle kelime` ve `.filtre kelime-sil kelime`
+- Filtreler mesaj silme, uyarı ve uyarı sınırında timeout uygular.
+
+### Hoş geldin ve otomatik rol
+
+- `.hosgeldin ac #kanal [mesaj]`
+- `.hosgeldin ayril #kanal [mesaj]`
+- `.hosgeldin rol @rol`
+- Kapatmak için `kapat`, `ayril-kapat` veya `rol-kapat`; durumu görmek için `durum` kullanın.
+- Mesaj değişkenleri: `{user}`, `{username}`, `{server}`, `{count}`
+
+### Özel oda 2.0
+
+- `.oda-devret @kullanıcı`
+- `.oda-kilitle`
+- `.oda-limit 10` (0 sınırsızdır)
+
+### İstatistik ve slash komutları
+
+- `.istatistik ac`, `.istatistik kapat`, `.istatistik`
+- Aynı özelliklerin slash karşılıkları sunucuya otomatik kaydedilir: `/uyar`, `/filtre`, `/hosgeldin`, `/istatistik`, `/oda-devret`, `/oda-kilitle`, `/oda-limit`.
+- V2 ayarları `data/v2-data.json` dosyasında tutulur ve mevcut `data/bot-data.json` dosyasına dokunulmaz.
+
 ## Not
 
 Bu proje yerel geliştirme için tasarlanmıştır. Gerçek Discord sunucusunda kullanılmadan önce botunuzun gerekli Gateway intent izinlerine sahip olduğundan emin olun.
