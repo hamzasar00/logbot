@@ -1132,7 +1132,7 @@ async function handleHelpCommand(message) {
 client.on(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'online',
-    activities: [{ name: 'sunucuyu izliyor', type: 3 }],
+    activities: [{ name: 'Darth.vfx', type: 3 }],
   });
   console.log(`Bot aktif: ${client.user.tag} | Sunucu sayısı: ${client.guilds.cache.size}`);
 
