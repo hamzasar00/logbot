@@ -61,6 +61,7 @@ function normalizeGuild(value) {
     .filter((word) => typeof word === 'string' && word.trim())
     .map((word) => word.trim().toLocaleLowerCase('tr-TR'));
   if (!Array.isArray(guild.moderation.warnings)) guild.moderation.warnings = [];
+  guild.moderation.warnings = guild.moderation.warnings.filter((warning) => isPlainObject(warning));
   if (typeof guild.moderation.enabled !== 'boolean') guild.moderation.enabled = defaults.moderation.enabled;
   if (!Number.isInteger(guild.moderation.maxWarnings) || guild.moderation.maxWarnings < 1 || guild.moderation.maxWarnings > 10) guild.moderation.maxWarnings = defaults.moderation.maxWarnings;
   if (!Number.isFinite(guild.moderation.timeoutMinutes) || guild.moderation.timeoutMinutes < 1 || guild.moderation.timeoutMinutes > 10080) guild.moderation.timeoutMinutes = defaults.moderation.timeoutMinutes;
@@ -85,6 +86,15 @@ function normalizeGuild(value) {
   if (!isPlainObject(guild.stats)) guild.stats = {};
   guild.stats = mergeDefaults(guild.stats, defaults.stats);
   if (!isPlainObject(guild.stats.days)) guild.stats.days = {};
+  for (const [day, value] of Object.entries(guild.stats.days)) {
+    if (!isPlainObject(value)) {
+      delete guild.stats.days[day];
+      continue;
+    }
+    for (const key of ['messages', 'joins', 'leaves', 'voiceMinutes']) {
+      if (!Number.isFinite(value[key]) || value[key] < 0) value[key] = 0;
+    }
+  }
   if (typeof guild.stats.enabled !== 'boolean') guild.stats.enabled = defaults.stats.enabled;
   for (const key of ['messages', 'joins', 'leaves', 'voiceMinutes']) {
     if (!Number.isFinite(guild.stats[key]) || guild.stats[key] < 0) guild.stats[key] = defaults.stats[key];
