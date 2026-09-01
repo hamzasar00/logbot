@@ -490,8 +490,8 @@ function buildStaticRoleMenuEmbed(guildId) {
     .setTitle('👥 Rol Seçim Menüsü')
     .setColor(Colors.Purple)
     .setDescription(
-      'Sunucudaki bildirim ve topluluk rollerini aşağıdaki kategorilerden seçebilirsin.\n\n' +
-      'Bir kategoriye tıklayınca açılan menüden rollerini işaretle. Seçimi kaldırınca rolün de kaldırılır.'
+      'Sunucudaki bildirim ve topluluk rollerini aşağıdaki seçim menüsünden seçebilirsin.\n\n' +
+      'Önce bir kategori seç, ardından açılan rol menüsünden almak istediğin rolleri işaretle. Seçimi kaldırınca rolün de kaldırılır.'
     )
     .addFields(
       { name: '📌 Bilgi', value: 'Kategoriye tıkla, açılan listeden rollerini seç.', inline: false },
@@ -502,27 +502,25 @@ function buildStaticRoleMenuEmbed(guildId) {
 }
 function buildRoleMenuComponents(guildId) {
   const roles = getMenuRoles(guildId);
-  // Tasarımda tüm kategori butonları görünür kalır; boş kategoriler tıklanınca bilgi verir.
+  // Kategoriler ana mesajda tek bir seçim menüsü olarak gösterilir.
   const availableGroups = [...ROLE_MENU_GROUPS];
   if (roles.some((role) => role.group === 'general')) {
     availableGroups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
   }
 
-  const components = [];
-  for (let i = 0; i < availableGroups.length; i += 5) {
-    const row = new ActionRowBuilder();
-    for (const group of availableGroups.slice(i, i + 5)) {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId('role-group:' + group.id)
-          .setLabel(group.emoji + ' | ' + group.label)
-          .setStyle(ButtonStyle.Secondary)
-      );
-    }
-    components.push(row);
-  }
+  const categorySelect = new StringSelectMenuBuilder()
+    .setCustomId('role-group-select')
+    .setPlaceholder('Bir rol kategorisi seç')
+    .setMinValues(1)
+    .setMaxValues(1)
+    .addOptions(availableGroups.map((group) => ({
+      label: group.label.replace(' Rolleri Seç', ''),
+      value: group.id,
+      emoji: group.emoji,
+      description: 'Bu kategorideki rolleri görüntüle',
+    })));
 
-  return components;
+  return [new ActionRowBuilder().addComponents(categorySelect)];
 }
 
 function getRoleMenuGroup(groupId) {
@@ -535,7 +533,9 @@ function getGroupRoles(guildId, groupId) {
 }
 
 async function handleRoleGroupButton(interaction) {
-  const groupId = interaction.customId.replace('role-group:', '');
+  const groupId = interaction.isStringSelectMenu()
+    ? interaction.values[0]
+    : interaction.customId.replace('role-group:', '');
   const group = getRoleMenuGroup(groupId);
   const roles = getGroupRoles(interaction.guild.id, groupId);
   if (!group || roles.length === 0) {
@@ -1529,6 +1529,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
+    if (interaction.customId === 'role-group-select') {
+      await handleRoleGroupButton(interaction);
+      return;
+    }
+
     if (interaction.customId.startsWith('role-select:')) {
       await handleRoleSelect(interaction);
     }
