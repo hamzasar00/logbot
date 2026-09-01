@@ -502,7 +502,8 @@ function buildStaticRoleMenuEmbed(guildId) {
 }
 function buildRoleMenuComponents(guildId) {
   const roles = getMenuRoles(guildId);
-  const availableGroups = ROLE_MENU_GROUPS.filter((group) => roles.some((role) => role.group === group.id));
+  // Tasarımda tüm kategori butonları görünür kalır; boş kategoriler tıklanınca bilgi verir.
+  const availableGroups = [...ROLE_MENU_GROUPS];
   if (roles.some((role) => role.group === 'general')) {
     availableGroups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
   }
