@@ -319,7 +319,8 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     if (message.content.startsWith('.')) {
       const args = message.content.slice(1).trim().split(/\s+/);
       const command = args.shift().toLocaleLowerCase('tr-TR');
-      const context = { ...message, args };
+      const context = Object.create(message);
+      context.args = args;
       if (['uyar', 'uyarı'].includes(command)) return warningCommand(context, 'add');
       if (['uyarilar', 'uyarılar'].includes(command)) return warningCommand(context, 'list');
       if (['uyarisil', 'uyarı-sil'].includes(command)) return warningCommand(context, 'clear');
