@@ -130,8 +130,9 @@ async function filterCommand(context, action, suppliedWord) {
     return respond(context, { content: 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
   }
   const config = getGuild(guild.id).moderation;
+  const normalizedAction = { link: 'links', invite: 'invites' }[action] || action;
   const filters = { ...config.filters };
-  action = action || 'durum';
+  action = normalizedAction || 'durum';
   if (action === 'durum') {
     const lines = ['Moderasyon: ' + (config.enabled ? 'açık' : 'kapalı')];
     for (const key of ['spam', 'links', 'caps', 'invites']) lines.push(key + ': ' + (filters[key] ? 'açık' : 'kapalı'));
