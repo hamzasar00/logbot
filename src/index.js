@@ -821,9 +821,16 @@ async function updateRoomMemberAccess(roomInfo, userId, canAccess) {
       });
     }
   } else {
-    await voiceChannel.permissionOverwrites.delete(userId).catch(() => null);
+    await voiceChannel.permissionOverwrites.edit(userId, {
+      Connect: false,
+      ViewChannel: false,
+    }).catch(() => null);
     if (controlChannel) {
-      await controlChannel.permissionOverwrites.delete(userId).catch(() => null);
+      await controlChannel.permissionOverwrites.edit(userId, {
+        ViewChannel: false,
+        SendMessages: false,
+        ReadMessageHistory: false,
+      }).catch(() => null);
     }
   }
 
