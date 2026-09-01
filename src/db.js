@@ -24,6 +24,7 @@ function createEmptyState() {
     guild_setup: {},
     guild_category_ids: {},
     guild_roles: {},
+    guild_role_groups: {},
     role_menu_storage: {},
   };
 }
@@ -127,22 +128,29 @@ function getLogDefinitions() {
   return { ...LOG_GROUPS };
 }
 
-function addRoleToMenu(guildId, roleId, emoji) {
+function addRoleToMenu(guildId, roleId, emoji, group = 'general') {
   if (!state.guild_roles[guildId]) state.guild_roles[guildId] = {};
+  if (!state.guild_role_groups[guildId]) state.guild_role_groups[guildId] = {};
   state.guild_roles[guildId][roleId] = emoji;
+  state.guild_role_groups[guildId][roleId] = group || 'general';
   saveState();
 }
 
 function removeRoleFromMenu(guildId, roleId) {
   if (!state.guild_roles[guildId]) return;
   delete state.guild_roles[guildId][roleId];
+  if (state.guild_role_groups[guildId]) delete state.guild_role_groups[guildId][roleId];
   saveState();
 }
 
 function getMenuRoles(guildId) {
   return Object.entries(state.guild_roles[guildId] || {})
     .sort(([first], [second]) => first.localeCompare(second))
-    .map(([role_id, emoji]) => ({ role_id, emoji }));
+    .map(([role_id, emoji]) => ({
+      role_id,
+      emoji,
+      group: state.guild_role_groups[guildId]?.[role_id] || 'general',
+    }));
 }
 
 function getRoleEmoji(guildId, roleId) {
