@@ -506,10 +506,17 @@ function buildRoleMenuComponents(guildId) {
   );
   components.push(adminRow);
 
+  // Discord bir mesajda en fazla 5 action row kabul eder. Admin satırından sonra
+  // en fazla 20 rol göstermek menünün tamamen reddedilmesini önler.
+  const visibleRoles = roles.slice(0, 20);
+  if (roles.length > 20) {
+    console.warn(`Rol menüsü için ${roles.length} rol kayıtlı; ilk 20 rol gösterilecek.`);
+  }
+
   // Üye Bölümü Butonları
-  if (roles.length > 0) {
-    for (let i = 0; i < roles.length; i += 5) {
-      const chunk = roles.slice(i, i + 5);
+  if (visibleRoles.length > 0) {
+    for (let i = 0; i < visibleRoles.length; i += 5) {
+      const chunk = visibleRoles.slice(i, i + 5);
       const userRow = new ActionRowBuilder();
 
       for (const { role_id, emoji } of chunk) {
@@ -1051,6 +1058,11 @@ async function handleRoleAddCommand(message, args) {
     return;
   }
 
+  if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+    await message.reply('❌ Bu komut için Rolleri Yönet izni gerekir.');
+    return;
+  }
+
   if (args.length < 2) {
     await message.reply('Kullanım: `.roller-ekle @rol :emoji:`\nÖrnek: `.roller-ekle @Moderator 🛡️`');
     return;
@@ -1059,6 +1071,11 @@ async function handleRoleAddCommand(message, args) {
   const roleMatch = message.mentions.roles.first();
   if (!roleMatch) {
     await message.reply('Geçerli bir rol etiketle.');
+    return;
+  }
+
+  if (!roleMatch.editable) {
+    await message.reply('❌ Bu rol botun en yüksek rolünün altında değil.');
     return;
   }
 
@@ -1085,6 +1102,11 @@ async function handleRoleAddCommand(message, args) {
 async function handleRoleRemoveCommand(message, args) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+    await message.reply('❌ Bu komut için Rolleri Yönet izni gerekir.');
     return;
   }
 
