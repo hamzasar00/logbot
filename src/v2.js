@@ -62,22 +62,33 @@ function roleOf(context) {
 }
 
 function argsOf(context) {
-  return context.args || [];
+  return Array.isArray(context.args) ? context.args : [];
+}
+
+async function runV2Command(handler, context, label) {
+  try {
+    return await handler();
+  } catch (error) {
+    console.error('V2 ' + label + ' hatası:', error);
+    if (isInteraction(context) && !context.replied && !context.deferred) {
+      await context.reply({ content: '❌ Komut çalıştırılırken hata oluştu.', ephemeral: true }).catch(() => {});
+    }
+  }
 }
 
 async function memberOf(guild, userId) {
   return guild.members.cache.get(userId) || guild.members.fetch(userId).catch(() => null);
 }
 
-function textChannel(guild, channelId) {
-  const channel = guild.channels.cache.get(channelId);
+async function textChannel(guild, channelId) {
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
   return channel && channel.isTextBased() ? channel : null;
 }
 
 function formatMessage(text, member) {
   return String(text || '')
     .replaceAll('{user}', '<@' + member.id + '>')
-    .replaceAll('{username}', member.user.username)
+    .replaceAll('{username}', member.user?.username || member.displayName || 'Üye')
     .replaceAll('{server}', member.guild.name)
     .replaceAll('{count}', String(member.guild.memberCount));
 }
@@ -95,8 +106,6 @@ async function warningCommand(context, action) {
   }
   const target = targetOf(context);
   if (!target) return respond(context, { content: 'Bir kullanıcı belirtmelisin.', ephemeral: true });
-  const targetMember = await memberOf(guild, target.id);
-  if (!targetMember) return respond(context, { content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
   if (action === 'list') {
     const warnings = getWarnings(guild.id, target.id);
     const text = warnings.length
@@ -111,10 +120,12 @@ async function warningCommand(context, action) {
     const removed = clearWarnings(guild.id, target.id);
     return respond(context, { content: '✅ ' + removed + ' uyarı temizlendi.', ephemeral: true });
   }
+  const targetMember = await memberOf(guild, target.id);
+  if (!targetMember) return respond(context, { content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
   const reason = isInteraction(context)
     ? context.options.getString('sebep')
     : argsOf(context).slice(1).join(' ') || 'Sebep belirtilmedi';
-  const warning = addWarning(guild.id, target.id, context.user?.id || context.author.id, reason);
+  const warning = addWarning(guild.id, target.id, context.user?.id || context.author?.id || 'system', reason);
   const config = getGuild(guild.id).moderation;
   const total = getWarnings(guild.id, target.id).length;
   if (total >= config.maxWarnings && targetMember.moderatable) {
@@ -306,6 +317,7 @@ const slashCommands = [
   { name: 'uyar', description: 'Kullanıcıya uyarı verir', options: [{ name: 'user', description: 'Uyarılacak kullanıcı', type: 6, required: true }, { name: 'sebep', description: 'Sebep', type: 3, required: true }] },
   { name: 'uyarilar', description: 'Uyarıları gösterir', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
   { name: 'uyarisil', description: 'Uyarıları temizler', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
+  { name: 'uyari-sil', description: 'Uyarıları temizler', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
   { name: 'filtre', description: 'Otomatik moderasyon ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'spam', value: 'spam' }, { name: 'link', value: 'links' }, { name: 'caps', value: 'caps' }, { name: 'invite', value: 'invites' }, { name: 'kelime-ekle', value: 'kelime-ekle' }, { name: 'kelime-sil', value: 'kelime-sil' }] }, { name: 'durum', description: 'ac veya kapat', type: 3 }, { name: 'kelime', description: 'Kelime', type: 3 }] },
   { name: 'hosgeldin', description: 'Hoş geldin ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'ayril', value: 'ayril' }, { name: 'ayril-kapat', value: 'ayril-kapat' }, { name: 'rol', value: 'rol' }, { name: 'rol-kapat', value: 'rol-kapat' }] }, { name: 'kanal', description: 'Metin kanalı', type: 7, channel_types: [0] }, { name: 'rol', description: 'Otomatik rol', type: 8 }, { name: 'mesaj', description: 'Şablon mesaj', type: 3 }] },
   { name: 'istatistik', description: 'Sunucu istatistikleri', options: [{ name: 'eylem', description: 'İşlem', type: 3, choices: [{ name: 'rapor', value: 'rapor' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }] }, { name: 'gun', description: 'Gün sayısı', type: 4, min_value: 1, max_value: 30 }] },
@@ -322,15 +334,15 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       const command = (args.shift() || '').toLocaleLowerCase('tr-TR');
       const context = Object.create(message);
       context.args = args;
-      if (['uyar', 'uyarı'].includes(command)) return warningCommand(context, 'add');
-      if (['uyarilar', 'uyarılar'].includes(command)) return warningCommand(context, 'list');
-      if (['uyarisil', 'uyari-sil', 'uyarı-sil'].includes(command)) return warningCommand(context, 'clear');
-      if (command === 'filtre') return filterCommand(context, args[0], args[1]);
-      if (command === 'hosgeldin' || command === 'hoşgeldin') return welcomeCommand(context);
-      if (command === 'istatistik') return statsCommand(context);
-      if (command === 'oda-devret') return roomCommand(context, 'devret');
-      if (command === 'oda-kilitle') return roomCommand(context, 'kilitle');
-      if (command === 'oda-limit') return roomCommand(context, 'limit');
+      if (['uyar', 'uyarı'].includes(command)) return runV2Command(() => warningCommand(context, 'add'), context, command);
+      if (['uyarilar', 'uyarılar'].includes(command)) return runV2Command(() => warningCommand(context, 'list'), context, command);
+      if (['uyarisil', 'uyari-sil', 'uyarı-sil'].includes(command)) return runV2Command(() => warningCommand(context, 'clear'), context, command);
+      if (command === 'filtre') return runV2Command(() => filterCommand(context, args[0], args[1]), context, command);
+      if (command === 'hosgeldin' || command === 'hoşgeldin') return runV2Command(() => welcomeCommand(context), context, command);
+      if (command === 'istatistik') return runV2Command(() => statsCommand(context), context, command);
+      if (command === 'oda-devret') return runV2Command(() => roomCommand(context, 'devret'), context, command);
+      if (command === 'oda-kilitle') return runV2Command(() => roomCommand(context, 'kilitle'), context, command);
+      if (command === 'oda-limit') return runV2Command(() => roomCommand(context, 'limit'), context, command);
     }
     recordStat(message.guild.id, 'messages');
     await applyModeration(message, sendLog).catch((error) => console.error('V2 moderasyon hatası:', error.message));
@@ -343,7 +355,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (commandHandlers[name]) return await commandHandlers[name](interaction);
       if (name === 'uyar') return await warningCommand(interaction, 'add');
       if (name === 'uyarilar') return await warningCommand(interaction, 'list');
-      if (name === 'uyarisil') return await warningCommand(interaction, 'clear');
+      if (name === 'uyarisil' || name === 'uyari-sil') return await warningCommand(interaction, 'clear');
       if (name === 'filtre') return await filterCommand(interaction, interaction.options.getString('eylem'), interaction.options.getString('kelime'));
       if (name === 'hosgeldin') return await welcomeCommand(interaction);
       if (name === 'istatistik') return await statsCommand(interaction);
@@ -362,7 +374,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     if (member.user.bot && !config.welcome.includeBots) return;
     if (config.welcome.enabled && config.welcome.channelId) {
       const channel = textChannel(member.guild, config.welcome.channelId);
-      if (channel) await channel.send({ content: formatMessage(config.welcome.message, member) }).catch(() => {});
+      if (channel) await channel.send({ content: formatMessage(config.welcome.message, member) }).catch((error) => console.error('Hoş geldin mesajı gönderilemedi:', error.message));
     }
     if (config.welcome.autoRoleId) await member.roles.add(config.welcome.autoRoleId).catch(() => {});
   });
@@ -372,7 +384,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     recordStat(member.guild.id, 'leaves');
     if (!config.welcome.leaveEnabled || !config.welcome.leaveChannelId) return;
     const channel = textChannel(member.guild, config.welcome.leaveChannelId);
-    if (channel) await channel.send({ content: formatMessage(config.welcome.leaveMessage, member) }).catch(() => {});
+    if (channel) await channel.send({ content: formatMessage(config.welcome.leaveMessage, member) }).catch((error) => console.error('Ayrılma mesajı gönderilemedi:', error.message));
   });
 
   client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
