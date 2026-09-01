@@ -2036,6 +2036,19 @@ client.on('invalidated', () => {
   console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
 });
 
+require('./v2').initializeV2({
+  client,
+  rest,
+  sendLog,
+  commandHandlers: {
+    setup: handleSetupCommand,
+    log: handleLogCommand,
+    oda: handleRoomCommand,
+    roller: handleRoleCommand,
+    help: handleHelpCommand,
+  },
+});
+
 client.login(discordToken).catch((error) => {
   console.error('Bot giriş başarısız:', error.message);
   process.exit(1);
