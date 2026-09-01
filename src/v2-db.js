@@ -44,10 +44,39 @@ function mergeDefaults(target, defaults) {
   return source;
 }
 
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeGuild(value) {
+  const defaults = createGuildDefaults();
+  const guild = mergeDefaults(isPlainObject(value) ? value : {}, defaults);
+
+  if (!isPlainObject(guild.moderation)) guild.moderation = {};
+  guild.moderation = mergeDefaults(guild.moderation, defaults.moderation);
+  if (!isPlainObject(guild.moderation.filters)) guild.moderation.filters = {};
+  guild.moderation.filters = mergeDefaults(guild.moderation.filters, defaults.moderation.filters);
+  if (!Array.isArray(guild.moderation.filters.blockedWords)) guild.moderation.filters.blockedWords = [];
+  if (!Array.isArray(guild.moderation.warnings)) guild.moderation.warnings = [];
+
+  if (!isPlainObject(guild.welcome)) guild.welcome = {};
+  guild.welcome = mergeDefaults(guild.welcome, defaults.welcome);
+
+  if (!isPlainObject(guild.rooms)) guild.rooms = {};
+  guild.rooms = mergeDefaults(guild.rooms, defaults.rooms);
+  if (!isPlainObject(guild.rooms.transferredOwners)) guild.rooms.transferredOwners = {};
+
+  if (!isPlainObject(guild.stats)) guild.stats = {};
+  guild.stats = mergeDefaults(guild.stats, defaults.stats);
+  if (!isPlainObject(guild.stats.days)) guild.stats.days = {};
+
+  return guild;
+}
+
 function normalizeState(value) {
-  const source = value && typeof value === 'object' ? value : createEmptyState();
-  if (!source.guilds || typeof source.guilds !== 'object' || Array.isArray(source.guilds)) source.guilds = {};
-  for (const guildId of Object.keys(source.guilds)) source.guilds[guildId] = mergeDefaults(source.guilds[guildId], createGuildDefaults());
+  const source = isPlainObject(value) ? value : createEmptyState();
+  if (!isPlainObject(source.guilds)) source.guilds = {};
+  for (const guildId of Object.keys(source.guilds)) source.guilds[guildId] = normalizeGuild(source.guilds[guildId]);
   source.version = 2;
   return source;
 }
@@ -74,7 +103,7 @@ function getGuild(guildId) {
     state.guilds[guildId] = createGuildDefaults();
     saveState();
   } else {
-    state.guilds[guildId] = mergeDefaults(state.guilds[guildId], createGuildDefaults());
+    state.guilds[guildId] = normalizeGuild(state.guilds[guildId]);
   }
   return state.guilds[guildId];
 }
