@@ -12,11 +12,13 @@ const {
   clearWarnings,
   recordStat,
   getStats,
+  getLeaderboard,
   saveState,
 } = require('./v2-db');
 
 const spamBuckets = new Map();
 const voiceStarted = new Map();
+const inviteSnapshots = new Map();
 
 function isInteraction(context) {
   return typeof context.isChatInputCommand === 'function' && context.isChatInputCommand();
@@ -83,6 +85,30 @@ async function memberOf(guild, userId) {
 async function textChannel(guild, channelId) {
   const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
   return channel && channel.isTextBased() ? channel : null;
+}
+
+async function snapshotInvites(guild) {
+  const invites = await guild.invites.fetch().catch(() => null);
+  if (!invites) return false;
+  const snapshot = new Map();
+  for (const invite of invites.values()) snapshot.set(invite.code, invite.uses ?? 0);
+  inviteSnapshots.set(guild.id, snapshot);
+  return true;
+}
+
+async function detectInviterId(guild) {
+  const previous = inviteSnapshots.get(guild.id);
+  const invites = await guild.invites.fetch().catch(() => null);
+  if (!invites) return null;
+  const current = new Map();
+  let inviterId = null;
+  for (const invite of invites.values()) {
+    const uses = invite.uses ?? 0;
+    current.set(invite.code, uses);
+    if (previous && !inviterId && uses > (previous.get(invite.code) ?? 0)) inviterId = invite.inviterId ?? null;
+  }
+  inviteSnapshots.set(guild.id, current);
+  return inviterId;
 }
 
 function formatMessage(text, member) {
@@ -268,6 +294,33 @@ async function statsCommand(context) {
   )] });
 }
 
+const leaderboardCategories = {
+  metin: { key: 'messages', label: 'Metin', unit: 'mesaj' },
+  text: { key: 'messages', label: 'Metin', unit: 'mesaj' },
+  ses: { key: 'voiceMinutes', label: 'Ses', unit: 'dakika' },
+  voice: { key: 'voiceMinutes', label: 'Ses', unit: 'dakika' },
+  davet: { key: 'invites', label: 'Davet', unit: 'davet' },
+  invite: { key: 'invites', label: 'Davet', unit: 'davet' },
+};
+
+async function leaderboardCommand(context) {
+  const guild = guildOf(context);
+  if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  const requested = isInteraction(context) ? context.options.getString('kategori') || 'metin' : argsOf(context)[0] || 'metin';
+  const category = leaderboardCategories[requested.toLocaleLowerCase('tr-TR')];
+  if (!category) return respond(context, { content: 'Kategori seç: `metin`, `ses` veya `davet`.', ephemeral: true });
+  const requestedLimit = isInteraction(context) ? context.options.getInteger('limit') || 10 : Number(argsOf(context)[1]) || 10;
+  const limit = Math.min(10, Math.max(1, Number.isInteger(requestedLimit) ? requestedLimit : 10));
+  const rows = getLeaderboard(guild.id, category.key, limit);
+  if (!rows.length) return respond(context, { content: 'Bu kategori için henüz leaderboard verisi yok. Önce `.istatistik ac` ile istatistikleri aç.', ephemeral: true });
+  const lines = rows.map((row, index) => {
+    const member = guild.members.cache.get(row.userId);
+    const name = member?.displayName ? member.displayName + ' (<@' + row.userId + '>)' : '<@' + row.userId + '>';
+    return '**' + (index + 1) + '.** ' + name + ' — `' + row.value + ' ' + category.unit + '`';
+  });
+  return respond(context, { embeds: [new EmbedBuilder().setTitle('🏆 ' + category.label + ' Leaderboard').setDescription(lines.join('\n').slice(0, 3900)).setColor(0xF59E0B)] });
+}
+
 function ownedRoom(guild, userId) {
   const transferred = getGuild(guild.id).rooms.transferredOwners || {};
   return guild.channels.cache.find((channel) => {
@@ -349,6 +402,7 @@ const slashCommands = [
   { name: 'filtre', description: 'Otomatik moderasyon ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'spam', value: 'spam' }, { name: 'link', value: 'links' }, { name: 'caps', value: 'caps' }, { name: 'invite', value: 'invites' }, { name: 'kelime-ekle', value: 'kelime-ekle' }, { name: 'kelime-sil', value: 'kelime-sil' }] }, { name: 'durum', description: 'ac veya kapat', type: 3 }, { name: 'kelime', description: 'Kelime', type: 3 }] },
   { name: 'hosgeldin', description: 'Hoş geldin ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'ayril', value: 'ayril' }, { name: 'ayril-kapat', value: 'ayril-kapat' }, { name: 'rol', value: 'rol' }, { name: 'rol-kapat', value: 'rol-kapat' }] }, { name: 'kanal', description: 'Metin kanalı', type: 7, channel_types: [0] }, { name: 'rol', description: 'Otomatik rol', type: 8 }, { name: 'mesaj', description: 'Şablon mesaj', type: 3 }] },
   { name: 'istatistik', description: 'Sunucu istatistikleri', options: [{ name: 'eylem', description: 'İşlem', type: 3, choices: [{ name: 'rapor', value: 'rapor' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }] }, { name: 'gun', description: 'Gün sayısı', type: 4, min_value: 1, max_value: 30 }] },
+  { name: 'leaderboard', description: 'Metin, ses ve davet sıralaması', options: [{ name: 'kategori', description: 'Sıralama türü', type: 3, required: true, choices: [{ name: 'metin', value: 'metin' }, { name: 'ses', value: 'ses' }, { name: 'davet', value: 'davet' }] }, { name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
   { name: 'oda-devret', description: 'Özel oda sahipliğini devreder', options: [{ name: 'user', description: 'Yeni sahip', type: 6, required: true }] },
   { name: 'oda-kilitle', description: 'Özel odayı kilitler veya açar' },
   { name: 'oda-limit', description: 'Özel oda limitini değiştirir', options: [{ name: 'limit', description: '0 sınırsızdır', type: 4, required: true, min_value: 0, max_value: 99 }] },
@@ -369,11 +423,12 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (command === 'filtre') return runV2Command(() => filterCommand(context, args[0], args[1]), context, command);
       if (command === 'hosgeldin' || command === 'hoşgeldin') return runV2Command(() => welcomeCommand(context), context, command);
       if (command === 'istatistik') return runV2Command(() => statsCommand(context), context, command);
+      if (['leaderboard', 'leaderbord', 'liderlik', 'liderboard'].includes(command)) return runV2Command(() => leaderboardCommand(context), context, command);
       if (command === 'oda-devret') return runV2Command(() => roomCommand(context, 'devret'), context, command);
       if (command === 'oda-kilitle') return runV2Command(() => roomCommand(context, 'kilitle'), context, command);
       if (command === 'oda-limit') return runV2Command(() => roomCommand(context, 'limit'), context, command);
     }
-    recordStat(message.guild.id, 'messages');
+    recordStat(message.guild.id, 'messages', 1, message.author.id);
       await applyModeration(message, sendLog).catch((error) => console.error('V2 moderasyon hatası:', error.message));
     } catch (error) {
       console.error('V2 mesaj handler hatası:', error);
@@ -391,6 +446,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'filtre') return await filterCommand(interaction, interaction.options.getString('eylem'), interaction.options.getString('kelime'));
       if (name === 'hosgeldin') return await welcomeCommand(interaction);
       if (name === 'istatistik') return await statsCommand(interaction);
+      if (name === 'leaderboard') return await leaderboardCommand(interaction);
       if (name === 'oda-devret') return await roomCommand(interaction, 'devret');
       if (name === 'oda-kilitle') return await roomCommand(interaction, 'kilitle');
       if (name === 'oda-limit') return await roomCommand(interaction, 'limit');
@@ -404,6 +460,8 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     try {
       const config = getGuild(member.guild.id);
     recordStat(member.guild.id, 'joins');
+      const inviterId = await detectInviterId(member.guild);
+      if (inviterId) recordStat(member.guild.id, 'invites', 1, inviterId);
     if (member.user.bot && !config.welcome.includeBots) return;
     if (config.welcome.enabled && config.welcome.channelId) {
       const channel = await textChannel(member.guild, config.welcome.channelId);
@@ -433,7 +491,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     if (!oldState.channelId && newState.channelId) voiceStarted.set(key, Date.now());
     if (oldState.channelId && oldState.channelId !== newState.channelId) {
       const started = voiceStarted.get(key);
-      if (started) recordStat(newState.guild.id, 'voiceMinutes', Math.max(1, Math.ceil((Date.now() - started) / 60000)));
+      if (started) recordStat(newState.guild.id, 'voiceMinutes', Math.max(1, Math.ceil((Date.now() - started) / 60000)), newState.id);
       if (newState.channelId) voiceStarted.set(key, Date.now());
         else voiceStarted.delete(key);
       }
@@ -444,6 +502,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
 
   client.once(Events.ClientReady, async () => {
     for (const guild of client.guilds.cache.values()) {
+      await snapshotInvites(guild);
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => console.error('V2 slash komutları kaydedilemedi:', error.message));
     }
