@@ -1062,6 +1062,7 @@ async function handleRoleAddCommand(message, args) {
 
   try {
     addRoleToMenu(message.guild.id, roleMatch.id, emoji);
+    await ensureRoleMenu(message.guild);
     const embed = new EmbedBuilder()
       .setTitle('✅ Rol Eklendi')
       .setDescription(`${emoji} ${roleMatch.name} rol menüsüne eklendi.`)
@@ -1087,6 +1088,7 @@ async function handleRoleRemoveCommand(message, args) {
 
   try {
     removeRoleFromMenu(message.guild.id, roleMatch.id);
+    await ensureRoleMenu(message.guild);
     const embed = new EmbedBuilder()
       .setTitle('✅ Rol Silindi')
       .setDescription(`${roleMatch.name} rol menüsünden silindi.`)
@@ -1294,6 +1296,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      const botMember = interaction.guild.members.me;
+      if (!botMember?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        await interaction.reply({ content: '❌ Botta Rolleri Yönet izni yok.', ephemeral: true });
+        return;
+      }
+
+      if (!role.editable) {
+        await interaction.reply({ content: '❌ Bu rol botun en yüksek rolünün altında değil; rol hiyerarşisini kontrol et.', ephemeral: true });
+        return;
+      }
+
       try {
         if (member.roles.cache.has(roleId)) {
           await member.roles.remove(roleId);
@@ -1304,7 +1317,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       } catch (error) {
         console.error('Rol toggle hatası:', error);
-        await interaction.reply({ content: '❌ Rol değiştirilirken hata oluştu.', ephemeral: true });
+        const content = error?.code === 50013
+          ? '❌ Botun bu rolü yönetme yetkisi yok. Bot rolünü hedef rolün üstüne taşı.'
+          : '❌ Rol değiştirilirken hata oluştu.';
+        await interaction.reply({ content, ephemeral: true });
       }
       return;
     }
@@ -1403,8 +1419,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const roleInput = interaction.fields.getTextInputValue('role-id-input').trim();
       const emoji = interaction.fields.getTextInputValue('emoji-input').trim();
 
-      const roleMatch = interaction.message?.mentions?.roles?.first() || 
-                        interaction.guild.roles.cache.find(r => r.name === roleInput || r.id === roleInput) ||
+      const roleId = roleInput.match(/^<@&(\d+)>$/)?.[1] || roleInput;
+
+      const roleMatch = interaction.guild.roles.cache.get(roleId) ||
+                        interaction.guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase()) ||
                         interaction.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleInput.toLowerCase()));
 
       if (!roleMatch) {
@@ -1432,7 +1450,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'role-remove-modal') {
       const roleInput = interaction.fields.getTextInputValue('role-id-input').trim();
 
-      const roleMatch = interaction.guild.roles.cache.find(r => r.name === roleInput || r.id === roleInput) ||
+      const roleId = roleInput.match(/^<@&(\d+)>$/)?.[1] || roleInput;
+
+      const roleMatch = interaction.guild.roles.cache.get(roleId) ||
+                        interaction.guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase()) ||
                         interaction.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleInput.toLowerCase()));
 
       if (!roleMatch) {
