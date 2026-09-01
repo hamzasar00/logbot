@@ -288,10 +288,37 @@ async function roomCommand(context, action) {
     const target = targetOf(context);
     if (!target || target.bot) return respond(context, { content: 'Bir kullanıcı belirtmelisin.', ephemeral: true });
     if (!await memberOf(guild, target.id)) return respond(context, { content: 'Kullanıcı sunucuda bulunamadı.', ephemeral: true });
+    const existingTargetRoom = ownedRoom(guild, target.id);
+    if (existingTargetRoom && existingTargetRoom.id !== room.id) {
+      return respond(context, { content: 'Bu kullanıcının zaten aktif bir özel odası var.', ephemeral: true });
+    }
     await room.permissionOverwrites.edit(userId, { Connect: false, ViewChannel: false });
     await room.permissionOverwrites.edit(target.id, { Connect: true, ViewChannel: true });
+    const controlChannel = guild.channels.cache.find((channel) =>
+      channel.type === ChannelType.GuildText && channel.topic === 'logbot-room:' + room.id
+    );
+    if (controlChannel) {
+      await controlChannel.permissionOverwrites.edit(userId, {
+        ViewChannel: false,
+        SendMessages: false,
+        ReadMessageHistory: false,
+      });
+      await controlChannel.permissionOverwrites.edit(target.id, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+      });
+    }
     const baseName = room.name.replace(/ · .+$/, '');
     await room.setName(baseName + ' · ' + target.username).catch(() => {});
+    const activeOwners = globalThis.roomOwnerMap;
+    const activeRoomInfo = activeOwners?.get(room.id);
+    if (activeRoomInfo) {
+      activeRoomInfo.ownerId = target.id;
+      activeRoomInfo.roomName = baseName;
+      activeRoomInfo.controlChannelId = controlChannel?.id || activeRoomInfo.controlChannelId || null;
+      activeOwners.set(room.id, activeRoomInfo);
+    }
     const config = getGuild(guild.id).rooms;
     updateGuildSection(guild.id, 'rooms', { transferredOwners: { ...config.transferredOwners, [room.id]: target.id } });
     return respond(context, { content: '✅ Özel oda sahipliği <@' + target.id + '> kullanıcısına devredildi.', ephemeral: true });
