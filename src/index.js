@@ -669,12 +669,20 @@ async function ensureRoleMenuInternal(guild) {
     saveRoleMenuMessage(guild.id, roleChannel.id, newMessage.id);
   } catch (error) {
     console.error('Rol menüsü oluşturma hatası:', error);
+    throw error;
   }
 }
 
 async function ensureRoleMenu(guild) {
-  if (!guild) return;
-  return runGuildTaskOnce(`role-menu:${guild.id}`, () => ensureRoleMenuInternal(guild));
+  if (!guild) return false;
+
+  try {
+    await runGuildTaskOnce(`role-menu:${guild.id}`, () => ensureRoleMenuInternal(guild));
+    return true;
+  } catch (error) {
+    console.error(`[${guild.name}] Rol menüsü hazırlanamadı:`, error.message);
+    return false;
+  }
 }
 
 function getRoomOwnerMap() {
@@ -1106,7 +1114,12 @@ async function handleRoleMenuCommand(message) {
     return;
   }
 
-  await ensureRoleMenu(message.guild);
+  const menuReady = await ensureRoleMenu(message.guild);
+  if (!menuReady) {
+    await message.reply('❌ Rol menüsü oluşturulamadı. Botta Kanal Yönet ve Mesaj Gönder izinlerini kontrol et.');
+    return;
+  }
+
   const embed = new EmbedBuilder()
     .setTitle('✅ Rol Menüsü Hazırlandı')
     .setDescription('Rol seçim menüsü `rol-menusu` kanalında oluşturuldu.')
@@ -1118,6 +1131,12 @@ async function handleRoleMenuCommand(message) {
 async function handleRoleCommand(message) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  const menuReady = await ensureRoleMenu(message.guild);
+  if (!menuReady) {
+    await message.reply('❌ Rol menüsü oluşturulamadı. Botta Kanal Yönet ve Mesaj Gönder izinlerini kontrol et.');
     return;
   }
 
