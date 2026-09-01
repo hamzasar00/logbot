@@ -1119,7 +1119,7 @@ async function handleRoleCommand(message) {
     return;
   }
 
-  const embed = buildRoleMenuEmbed(message.guild.id);
+  const embed = buildStaticRoleMenuEmbed(message.guild.id);
   const components = buildRoleMenuComponents(message.guild.id);
 
   await message.reply({ embeds: [embed], components });
