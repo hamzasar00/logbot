@@ -1170,6 +1170,7 @@ client.on(Events.ClientReady, async () => {
         }
       }
       await ensureRoomMenu(guild);
+      await ensureRoleMenu(guild);
     } catch (error) {
       console.error(`[${guild.name}] başlangıç ayarı tamamlanamadı:`, error.message);
     }
