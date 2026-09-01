@@ -494,11 +494,11 @@ function buildRoleMenuComponents(guildId) {
     new ButtonBuilder()
       .setCustomId('role-menu-add')
       .setLabel('➕ Rol Ekle')
-      .setStyle(ButtonStyle.Green),
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('role-menu-remove')
       .setLabel('➖ Rol Sil')
-      .setStyle(ButtonStyle.Red),
+      .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId('role-menu-refresh')
       .setLabel('🔄 Menüyü Güncelle')
