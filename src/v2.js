@@ -244,7 +244,7 @@ async function statsCommand(context) {
   }
   const config = getGuild(guild.id).stats;
   if (!config.enabled) return respond(context, { content: 'İstatistikler kapalı. Yönetici `.istatistik ac` komutuyla açabilir.', ephemeral: true });
-  const days = isInteraction(context) ? context.options.getInteger('gun') || 7 : Math.min(30, Math.max(1, Number(argsOf(context)[1]) || 7));
+  const days = isInteraction(context) ? context.options.getInteger('gun') || 7 : Math.min(30, Math.max(1, Number(argsOf(context)[0]) || 7));
   const stats = getStats(guild.id, days);
   const daily = stats.days.length ? stats.days.map(([day, value]) => day + ': ' + value.messages + ' mesaj, ' + value.joins + ' katılım, ' + value.leaves + ' ayrılma').join('\n') : 'Henüz günlük kayıt yok.';
   return respond(context, { embeds: [new EmbedBuilder().setTitle('📊 Sunucu İstatistikleri').setColor(0x3B82F6).addFields(
@@ -291,7 +291,7 @@ async function roomCommand(context, action) {
     await room.permissionOverwrites.edit(guild.roles.everyone.id, { Connect: locked ? false : true, ViewChannel: true });
     return respond(context, { content: locked ? '🔒 Oda kilitlendi.' : '🔓 Odanın kilidi açıldı.', ephemeral: true });
   }
-  const limit = isInteraction(context) ? context.options.getInteger('limit') : Number(argsOf(context)[1]);
+  const limit = isInteraction(context) ? context.options.getInteger('limit') : Number(argsOf(context)[0]);
   if (!Number.isInteger(limit) || limit < 0 || limit > 99) return respond(context, { content: 'Kişi limiti 0 ile 99 arasında olmalı.', ephemeral: true });
   await room.setUserLimit(limit);
   return respond(context, { content: '✅ Oda kişi limiti güncellendi.', ephemeral: true });
@@ -319,12 +319,12 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     if (message.author.bot || !message.guild) return;
     if (message.content.startsWith('.')) {
       const args = message.content.slice(1).trim().split(/\s+/);
-      const command = args.shift().toLocaleLowerCase('tr-TR');
+      const command = (args.shift() || '').toLocaleLowerCase('tr-TR');
       const context = Object.create(message);
       context.args = args;
       if (['uyar', 'uyarı'].includes(command)) return warningCommand(context, 'add');
       if (['uyarilar', 'uyarılar'].includes(command)) return warningCommand(context, 'list');
-      if (['uyarisil', 'uyarı-sil'].includes(command)) return warningCommand(context, 'clear');
+      if (['uyarisil', 'uyari-sil', 'uyarı-sil'].includes(command)) return warningCommand(context, 'clear');
       if (command === 'filtre') return filterCommand(context, args[0], args[1]);
       if (command === 'hosgeldin' || command === 'hoşgeldin') return welcomeCommand(context);
       if (command === 'istatistik') return statsCommand(context);
