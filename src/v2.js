@@ -90,7 +90,8 @@ function formatMessage(text, member) {
     .replaceAll('{user}', '<@' + member.id + '>')
     .replaceAll('{username}', member.user?.username || member.displayName || 'Üye')
     .replaceAll('{server}', member.guild.name)
-    .replaceAll('{count}', String(member.guild.memberCount));
+    .replaceAll('{count}', String(member.guild.memberCount))
+    .slice(0, 2000);
 }
 
 async function temporaryMessage(channel, content) {
@@ -355,7 +356,8 @@ const slashCommands = [
 
 function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
   client.on(Events.MessageCreate, async (message) => {
-    if (message.author.bot || !message.guild) return;
+    try {
+      if (message.author.bot || !message.guild) return;
     if (message.content.startsWith('.')) {
       const args = message.content.slice(1).trim().split(/\s+/);
       const command = (args.shift() || '').toLocaleLowerCase('tr-TR');
@@ -372,7 +374,10 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (command === 'oda-limit') return runV2Command(() => roomCommand(context, 'limit'), context, command);
     }
     recordStat(message.guild.id, 'messages');
-    await applyModeration(message, sendLog).catch((error) => console.error('V2 moderasyon hatası:', error.message));
+      await applyModeration(message, sendLog).catch((error) => console.error('V2 moderasyon hatası:', error.message));
+    } catch (error) {
+      console.error('V2 mesaj handler hatası:', error);
+    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -396,32 +401,44 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
   });
 
   client.on(Events.GuildMemberAdd, async (member) => {
-    const config = getGuild(member.guild.id);
+    try {
+      const config = getGuild(member.guild.id);
     recordStat(member.guild.id, 'joins');
     if (member.user.bot && !config.welcome.includeBots) return;
     if (config.welcome.enabled && config.welcome.channelId) {
-      const channel = textChannel(member.guild, config.welcome.channelId);
+      const channel = await textChannel(member.guild, config.welcome.channelId);
       if (channel) await channel.send({ content: formatMessage(config.welcome.message, member) }).catch((error) => console.error('Hoş geldin mesajı gönderilemedi:', error.message));
     }
-    if (config.welcome.autoRoleId) await member.roles.add(config.welcome.autoRoleId).catch(() => {});
+      if (config.welcome.autoRoleId) await member.roles.add(config.welcome.autoRoleId).catch(() => {});
+    } catch (error) {
+      console.error('V2 üye katılım handler hatası:', error);
+    }
   });
 
   client.on(Events.GuildMemberRemove, async (member) => {
-    const config = getGuild(member.guild.id);
+    try {
+      const config = getGuild(member.guild.id);
     recordStat(member.guild.id, 'leaves');
     if (!config.welcome.leaveEnabled || !config.welcome.leaveChannelId) return;
-    const channel = textChannel(member.guild, config.welcome.leaveChannelId);
-    if (channel) await channel.send({ content: formatMessage(config.welcome.leaveMessage, member) }).catch((error) => console.error('Ayrılma mesajı gönderilemedi:', error.message));
+    const channel = await textChannel(member.guild, config.welcome.leaveChannelId);
+      if (channel) await channel.send({ content: formatMessage(config.welcome.leaveMessage, member) }).catch((error) => console.error('Ayrılma mesajı gönderilemedi:', error.message));
+    } catch (error) {
+      console.error('V2 üye ayrılma handler hatası:', error);
+    }
   });
 
   client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
-    const key = newState.guild.id + ':' + newState.id;
+    try {
+      const key = newState.guild.id + ':' + newState.id;
     if (!oldState.channelId && newState.channelId) voiceStarted.set(key, Date.now());
     if (oldState.channelId && oldState.channelId !== newState.channelId) {
       const started = voiceStarted.get(key);
       if (started) recordStat(newState.guild.id, 'voiceMinutes', Math.max(1, Math.ceil((Date.now() - started) / 60000)));
       if (newState.channelId) voiceStarted.set(key, Date.now());
-      else voiceStarted.delete(key);
+        else voiceStarted.delete(key);
+      }
+    } catch (error) {
+      console.error('V2 ses istatistik handler hatası:', error);
     }
   });
 
@@ -433,7 +450,13 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     console.log('V2 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik ve slash komutları.');
   });
 
-  setInterval(() => saveState(), 30000);
+  setInterval(() => {
+    try {
+      saveState();
+    } catch (error) {
+      console.error('V2 otomatik kayıt hatası:', error);
+    }
+  }, 30000);
 }
 
 module.exports = { initializeV2 };
