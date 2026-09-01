@@ -112,7 +112,7 @@ async function warningCommand(context, action) {
       ? warnings.slice(-10).map((w, i) => (i + 1) + '. ' + w.reason + ' — ' + new Date(w.createdAt).toLocaleString('tr-TR')).join('\n')
       : 'Kayıtlı uyarı yok.';
     return respond(context, {
-      embeds: [new EmbedBuilder().setTitle('⚠️ Uyarı Geçmişi').setDescription('<@' + target.id + '>\n' + text).setColor(0xF59E0B)],
+      embeds: [new EmbedBuilder().setTitle('⚠️ Uyarı Geçmişi').setDescription('<@' + target.id + '>\n' + text.slice(0, 3900)).setColor(0xF59E0B)],
       ephemeral: true,
     });
   }
@@ -131,7 +131,7 @@ async function warningCommand(context, action) {
   if (total >= config.maxWarnings && targetMember.moderatable) {
     await targetMember.timeout(config.timeoutMinutes * 60 * 1000, 'Uyarı sınırına ulaşıldı').catch(() => {});
   }
-  return respond(context, { content: '⚠️ <@' + target.id + '> uyarıldı. Toplam: ' + total + '. Sebep: ' + warning.reason });
+  return respond(context, { content: '⚠️ <@' + target.id + '> uyarıldı. Toplam: ' + total + '. Sebep: ' + String(warning.reason).slice(0, 1800) });
 }
 
 async function filterCommand(context, action, suppliedWord) {
