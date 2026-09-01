@@ -57,18 +57,38 @@ function normalizeGuild(value) {
   if (!isPlainObject(guild.moderation.filters)) guild.moderation.filters = {};
   guild.moderation.filters = mergeDefaults(guild.moderation.filters, defaults.moderation.filters);
   if (!Array.isArray(guild.moderation.filters.blockedWords)) guild.moderation.filters.blockedWords = [];
+  guild.moderation.filters.blockedWords = guild.moderation.filters.blockedWords
+    .filter((word) => typeof word === 'string' && word.trim())
+    .map((word) => word.trim().toLocaleLowerCase('tr-TR'));
   if (!Array.isArray(guild.moderation.warnings)) guild.moderation.warnings = [];
+  if (typeof guild.moderation.enabled !== 'boolean') guild.moderation.enabled = defaults.moderation.enabled;
+  if (!Number.isInteger(guild.moderation.maxWarnings) || guild.moderation.maxWarnings < 1 || guild.moderation.maxWarnings > 10) guild.moderation.maxWarnings = defaults.moderation.maxWarnings;
+  if (!Number.isFinite(guild.moderation.timeoutMinutes) || guild.moderation.timeoutMinutes < 1 || guild.moderation.timeoutMinutes > 10080) guild.moderation.timeoutMinutes = defaults.moderation.timeoutMinutes;
+  for (const key of ['spam', 'links', 'caps', 'invites']) {
+    if (typeof guild.moderation.filters[key] !== 'boolean') guild.moderation.filters[key] = defaults.moderation.filters[key];
+  }
 
   if (!isPlainObject(guild.welcome)) guild.welcome = {};
   guild.welcome = mergeDefaults(guild.welcome, defaults.welcome);
+  for (const key of ['enabled', 'leaveEnabled', 'includeBots']) {
+    if (typeof guild.welcome[key] !== 'boolean') guild.welcome[key] = defaults.welcome[key];
+  }
+  for (const key of ['message', 'leaveMessage']) {
+    if (typeof guild.welcome[key] !== 'string') guild.welcome[key] = defaults.welcome[key];
+  }
 
   if (!isPlainObject(guild.rooms)) guild.rooms = {};
   guild.rooms = mergeDefaults(guild.rooms, defaults.rooms);
   if (!isPlainObject(guild.rooms.transferredOwners)) guild.rooms.transferredOwners = {};
+  guild.rooms.transferredOwners = Object.fromEntries(Object.entries(guild.rooms.transferredOwners).filter(([, userId]) => typeof userId === 'string' && userId));
 
   if (!isPlainObject(guild.stats)) guild.stats = {};
   guild.stats = mergeDefaults(guild.stats, defaults.stats);
   if (!isPlainObject(guild.stats.days)) guild.stats.days = {};
+  if (typeof guild.stats.enabled !== 'boolean') guild.stats.enabled = defaults.stats.enabled;
+  for (const key of ['messages', 'joins', 'leaves', 'voiceMinutes']) {
+    if (!Number.isFinite(guild.stats[key]) || guild.stats[key] < 0) guild.stats[key] = defaults.stats[key];
+  }
 
   return guild;
 }
