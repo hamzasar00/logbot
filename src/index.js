@@ -371,6 +371,46 @@ async function handleBoostGifCommand(message, args) {
   await message.reply('✅ Boost GIF bağlantısı kaydedildi.');
 }
 
+async function handleBoostTitleCommand(message, args) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const title = args.join(' ').trim();
+  if (!title) {
+    await message.reply('Kullanım: .boost-baslik Thank You Buddy');
+    return;
+  }
+
+  saveBoostSetting(message.guild.id, 'title', title.slice(0, 256));
+  await message.reply('✅ Boost başlığı kaydedildi.');
+}
+
+async function handleBoostMessageCommand(message, args) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const text = args.join(' ').trim();
+  if (!text) {
+    await message.reply('Kullanım: .boost-mesaj Welcome To Real CLR LEAK | LEAK Buddy');
+    return;
+  }
+
+  saveBoostSetting(message.guild.id, 'message', text.replace(/\s*\|\s*/g, '\n').slice(0, 4096));
+  await message.reply('✅ Boost mesajı kaydedildi.');
+}
+
 async function getAuditLogInfo(guild, targetId, eventTypes) {
   if (!guild || !targetId || !eventTypes) {
     return { executor: 'Bilinmeyen', reason: 'Sebep belirtilmedi' };
@@ -543,6 +583,16 @@ function buildHelpEmbed() {
       {
         name: '.boost-gif URL',
         value: 'Boost mesajındaki GIF bağlantısını ayarlar. Kaldırmak için boost-gif kaldır kullanılır.',
+        inline: false,
+      },
+      {
+        name: '.boost-baslik metin',
+        value: 'Boost embed başlığını ayarlar.',
+        inline: false,
+      },
+      {
+        name: '.boost-mesaj metin',
+        value: 'Boost embed alt yazısını ayarlar; | işareti yeni satır oluşturur.',
         inline: false,
       },
       {
@@ -1430,6 +1480,16 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (command === 'boost-gif') {
     await handleBoostGifCommand(message, args);
+    return;
+  }
+
+  if (command === 'boost-baslik') {
+    await handleBoostTitleCommand(message, args);
+    return;
+  }
+
+  if (command === 'boost-mesaj') {
+    await handleBoostMessageCommand(message, args);
     return;
   }
 
