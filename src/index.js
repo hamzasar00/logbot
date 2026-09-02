@@ -26,6 +26,8 @@ const {
   getRoleEmoji,
   saveRoleMenuMessage,
   getRoleMenuMessage,
+  saveBoostSetting,
+  getBoostSetting,
 } = require('./db');
 
 const client = new Client({
@@ -286,6 +288,89 @@ async function sendLog(guildId, logGroupKey, embed) {
   await channel.send({ embeds: [embed] });
 }
 
+function buildBoostNotificationEmbed(member) {
+  const title = getBoostSetting(member.guild.id, 'title') || 'Thank You Buddy';
+  const message = getBoostSetting(member.guild.id, 'message') || 'Welcome To Real CLR LEAK\nLEAK Buddy';
+  const gifUrl = getBoostSetting(member.guild.id, 'gif_url');
+  const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 128 });
+
+  const embed = new EmbedBuilder()
+    .setColor(Colors.Red)
+    .setAuthor({ name: member.user.username, iconURL: avatarUrl })
+    .setTitle(title)
+    .setDescription('<@' + member.user.id + '> ' + message)
+    .setThumbnail(avatarUrl)
+    .setTimestamp();
+
+  if (gifUrl) {
+    embed.setImage(gifUrl);
+  }
+
+  return embed;
+}
+
+function hasManageBoostPermission(message) {
+  return message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild) ||
+    message.member?.permissions?.has(PermissionsBitField.Flags.ManageChannels);
+}
+
+async function handleBoostChannelCommand(message) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const channel = message.mentions.channels.first();
+  if (!channel || !channel.isTextBased()) {
+    await message.reply('Kullanım: .boost-kanal #kanal');
+    return;
+  }
+
+  saveLogChannel(message.guild.id, 'boost', channel.id);
+  await message.reply('✅ Boost bildirim kanalı ' + channel + ' olarak ayarlandı.');
+}
+
+async function handleBoostGifCommand(message, args) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const firstArg = args[0]?.toLocaleLowerCase('tr-TR');
+  if (firstArg === 'kaldır' || firstArg === 'kaldir') {
+    saveBoostSetting(message.guild.id, 'gif_url', null);
+    await message.reply('✅ Boost GIF bağlantısı kaldırıldı.');
+    return;
+  }
+
+  const gifUrl = args[0] || message.attachments.first()?.url;
+  if (!gifUrl) {
+    await message.reply('Kullanım: .boost-gif https://... veya GIF dosyasını mesaja ekle.');
+    return;
+  }
+
+  try {
+    const parsedUrl = new URL(gifUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('invalid protocol');
+  } catch {
+    await message.reply('❌ Geçerli bir HTTP/HTTPS GIF bağlantısı veya dosyası kullan.');
+    return;
+  }
+
+  saveBoostSetting(message.guild.id, 'gif_url', gifUrl);
+  await message.reply('✅ Boost GIF bağlantısı kaydedildi.');
+}
+
 async function getAuditLogInfo(guild, targetId, eventTypes) {
   if (!guild || !targetId || !eventTypes) {
     return { executor: 'Bilinmeyen', reason: 'Sebep belirtilmedi' };
@@ -388,7 +473,7 @@ async function handleSetupCommand(message) {
 
   const embed = new EmbedBuilder()
     .setTitle('✅ Log Sistemi Ayarlandı')
-    .setDescription('Tek kategori ve 7 log kanalı hazırlandı. Oda oluşturma menüsü de hazır.')
+    .setDescription('Tek kategori ve 8 log kanalı hazırlandı. Oda oluşturma menüsü de hazır.')
     .setColor(Colors.Green)
     .addFields({
       name: '📁 Ana Kategori',
@@ -448,6 +533,16 @@ function buildHelpEmbed() {
       {
         name: '👥 ROL KOMUTLARı',
         value: '** **',
+        inline: false,
+      },
+      {
+        name: '.boost-kanal #kanal',
+        value: 'Boost bildirimlerinin gönderileceği kanalı ayarlar.',
+        inline: false,
+      },
+      {
+        name: '.boost-gif URL',
+        value: 'Boost mesajındaki GIF bağlantısını ayarlar. Kaldırmak için boost-gif kaldır kullanılır.',
         inline: false,
       },
       {
@@ -1328,6 +1423,16 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  if (command === 'boost-kanal') {
+    await handleBoostChannelCommand(message);
+    return;
+  }
+
+  if (command === 'boost-gif') {
+    await handleBoostGifCommand(message, args);
+    return;
+  }
+
   if (command === 'roller-ekle' || command === 'rol-ekle') {
     await handleRoleAddCommand(message, args);
     return;
@@ -1733,6 +1838,12 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
     await sendLog(newMember.guild.id, 'moderation', embed);
   }
+
+  const startedBoosting = !oldMember.premiumSinceTimestamp && Boolean(newMember.premiumSinceTimestamp);
+  if (startedBoosting) {
+    await sendLog(newMember.guild.id, 'boost', buildBoostNotificationEmbed(newMember));
+  }
+
 
   if (!oldMember.roles.cache.equals(newMember.roles.cache)) {
     const added = newMember.roles.cache.filter((role) => !oldMember.roles.cache.has(role.id)).map((role) => role.name);
