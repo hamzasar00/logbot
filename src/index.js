@@ -371,6 +371,39 @@ async function handleBoostGifCommand(message, args) {
   await message.reply('✅ Boost GIF bağlantısı kaydedildi.');
 }
 
+async function handleBoostTestCommand(message) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu test için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const channelId = getLogChannel(message.guild.id, 'boost');
+  if (!channelId) {
+    await message.reply('❌ Önce .boost-kanal #kanal ile boost kanalını ayarla.');
+    return;
+  }
+
+  const channel = message.guild.channels.cache.get(channelId) ||
+    await message.guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    await message.reply('❌ Kayıtlı boost kanalı bulunamadı. .boost-kanal #kanal ile tekrar ayarla.');
+    return;
+  }
+
+  try {
+    await channel.send({ embeds: [buildBoostNotificationEmbed(message.member)] });
+    await message.reply('✅ Test boost bildirimi ' + channel + ' kanalına gönderildi.');
+  } catch (error) {
+    console.error('Boost test gönderme hatası:', error);
+    await message.reply('❌ Test bildirimi gönderilemedi. Botun kanalda Mesaj Gönder ve Embed Links izinlerini kontrol et.');
+  }
+}
+
 async function handleBoostTitleCommand(message, args) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
@@ -573,6 +606,11 @@ function buildHelpEmbed() {
       {
         name: '.boost-gif bağlantı',
         value: 'Boost embedinde gösterilecek GIF bağlantısını kaydeder. Direkt GIF bağlantısı kullan veya GIF dosyasını mesaja ekle. Kaldırmak için: .boost-gif kaldır',
+        inline: false,
+      },
+      {
+        name: '.boost-test',
+        value: 'Mevcut boost ayarlarıyla test bildirimi gönderir; gerçek boost gerekmez.',
         inline: false,
       },
       {
@@ -1497,6 +1535,11 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (command === 'boost-gif') {
     await handleBoostGifCommand(message, args);
+    return;
+  }
+
+  if (command === 'boost-test') {
+    await handleBoostTestCommand(message);
     return;
   }
 
