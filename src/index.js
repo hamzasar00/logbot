@@ -541,7 +541,7 @@ async function handleLogCommand(message) {
 
 function buildHelpEmbed() {
   return new EmbedBuilder()
-    .setTitle('🆘 Kuvars Kaizen UYG | Detaylı Yardım')
+    .setTitle('🆘 Detaylı Yardım')
     .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Aşağıdaki komutlar nokta (.) prefixi ile kullanılır.')
     .setColor(Colors.Blurple)
     .addFields(
@@ -636,7 +636,7 @@ function buildHelpEmbed() {
         inline: false,
       },
     )
-    .setFooter({ text: 'Kuvars Kaizen UYG • Detaylı komut rehberi' })
+    .setFooter({ text: 'Detaylı komut rehberi' })
     .setTimestamp();
 }
 
