@@ -49,7 +49,6 @@ const ROLE_MENU_GROUPS = Object.freeze([
   { id: 'zodiac', emoji: '⭐', label: 'Burç Rolleri Seç' },
   { id: 'game', emoji: '🎮', label: 'Oyun Rolleri Seç' },
   { id: 'team', emoji: '⚽', label: 'Takım Rolleri Seç' },
-  { id: 'relationship', emoji: '💍', label: 'İlişki Rolleri Seç' },
 ]);
 
 const ROLE_GROUP_ALIASES = Object.freeze({
@@ -58,8 +57,16 @@ const ROLE_GROUP_ALIASES = Object.freeze({
   burç: 'zodiac', burc: 'zodiac', zodiac: 'zodiac',
   oyun: 'game', game: 'game',
   takım: 'team', takim: 'team', team: 'team',
-  ilişki: 'relationship', iliski: 'relationship', relationship: 'relationship',
   genel: 'general', diğer: 'general', diger: 'general', general: 'general',
+});
+
+const ROLE_GROUP_EMOJIS = Object.freeze({
+  event: '🎉',
+  color: '🎨',
+  zodiac: '⭐',
+  game: '🎮',
+  team: '⚽',
+  general: '🎭',
 });
 
 function normalizeRoleGroup(value) {
@@ -444,8 +451,8 @@ function buildHelpEmbed() {
         inline: false,
       },
       {
-        name: '.roller-ekle @rol :emoji:',
-        value: 'Rolü menüye ekler. Örnek: `.roller-ekle @Oyuncu 🎮`',
+        name: '.roller-ekle @rol kategori',
+        value: 'Rolü menüye ekler. Örnek: `.roller-ekle @Oyuncu oyun` (emoji otomatik eklenir).',
         inline: false,
       },
       {
@@ -500,7 +507,6 @@ const ROLE_MENU_PLACEHOLDERS = Object.freeze({
   zodiac: '⭐ | Burç Rolleri Seçin...',
   game: '🎮 | Oyun Rolleri Seçin',
   team: '⚽ | Takım Rolleri Seçin...',
-  relationship: '💍 | İlişki Rolleri Seçin...',
   general: '🎭 | Diğer Rolleri Seçin...',
 });
 
@@ -718,24 +724,31 @@ async function ensureRoleMenuInternal(guild) {
   };
 
   try {
-    if (roleMenuInfo) {
-      const channel = guild.channels.cache.get(roleMenuInfo.channelId);
-      if (channel && channel.type === ChannelType.GuildText) {
-        const message = await channel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
+    let roleChannel = null;
+
+    if (roleMenuInfo?.channelId) {
+      const savedChannel = await guild.channels.fetch(roleMenuInfo.channelId).catch(() => null);
+      if (savedChannel?.type === ChannelType.GuildText) {
+        roleChannel = savedChannel;
+        const message = await roleChannel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
         if (message) {
           await message.edit(buildRoleMenuPayload(guild.id));
-          const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
-          await syncExtraMenu(channel, messages);
+          const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
+          await syncExtraMenu(roleChannel, messages);
           return;
         }
       }
     }
 
     const savedRoleCategoryId = getCategoryId(guild.id, 'role');
-    const savedRoleCategory = savedRoleCategoryId ? guild.channels.cache.get(savedRoleCategoryId) : null;
-    let roleCategory = savedRoleCategory?.type === ChannelType.GuildCategory ? savedRoleCategory : guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'ROLLER'
-    );
+    const savedRoleCategory = savedRoleCategoryId
+      ? await guild.channels.fetch(savedRoleCategoryId).catch(() => null)
+      : null;
+    let roleCategory = savedRoleCategory?.type === ChannelType.GuildCategory
+      ? savedRoleCategory
+      : guild.channels.cache.find((channel) =>
+        channel.type === ChannelType.GuildCategory && channel.name === 'ROLLER'
+      );
 
     if (!roleCategory) {
       roleCategory = await guild.channels.create({
@@ -747,9 +760,13 @@ async function ensureRoleMenuInternal(guild) {
 
     saveCategoryId(guild.id, 'role', roleCategory.id);
 
-    let roleChannel = guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildText && channel.parentId === roleCategory.id && channel.name === 'rol-menusu'
-    );
+    if (!roleChannel || roleChannel.parentId !== roleCategory.id) {
+      roleChannel = guild.channels.cache.find((channel) =>
+        channel.type === ChannelType.GuildText &&
+        channel.parentId === roleCategory.id &&
+        channel.name === 'rol-menusu'
+      );
+    }
 
     if (!roleChannel) {
       roleChannel = await guild.channels.create({
@@ -1161,14 +1178,9 @@ async function handleRoleAddCommand(message, args) {
     return;
   }
 
-  if (args.length < 2) {
-    await message.reply('Kullanım: .roller-ekle @rol emoji kategori\nKategoriler: etkinlik, renk, burç, oyun, takım, ilişki');
-    return;
-  }
-
   const roleMatch = message.mentions.roles.first();
   if (!roleMatch) {
-    await message.reply('Geçerli bir rol etiketle.');
+    await message.reply('Kullanım: .roller-ekle @rol kategori\nÖrnek: .roller-ekle @Oyuncu oyun');
     return;
   }
 
@@ -1177,8 +1189,16 @@ async function handleRoleAddCommand(message, args) {
     return;
   }
 
-  const emoji = args[1];
-  const group = normalizeRoleGroup(args.slice(2).join(' '));
+  const values = args.slice(1);
+  const categoryToken = values.find((value) =>
+    Object.prototype.hasOwnProperty.call(ROLE_GROUP_ALIASES, String(value).trim().toLocaleLowerCase('tr-TR'))
+  );
+  const emojiToken = values.find((value) => Object.values(ROLE_GROUP_EMOJIS).includes(value));
+  const group = categoryToken ? normalizeRoleGroup(categoryToken) : (emojiToken
+    ? Object.entries(ROLE_GROUP_EMOJIS).find(([, emoji]) => emoji === emojiToken)?.[0] || 'general'
+    : 'general');
+  const emoji = ROLE_GROUP_EMOJIS[group] || '🎭';
+
   try {
     addRoleToMenu(message.guild.id, roleMatch.id, emoji, group);
     const menuReady = await ensureRoleMenu(message.guild);
@@ -1192,7 +1212,6 @@ async function handleRoleAddCommand(message, args) {
     await message.reply('❌ Rol eklenirken hata oluştu.');
   }
 }
-
 async function handleRoleRemoveCommand(message, args) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
@@ -1318,7 +1337,7 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
-  if (command === 'roller-ekle') {
+  if (command === 'roller-ekle' || command === 'rol-ekle') {
     await handleRoleAddCommand(message, args);
     return;
   }
