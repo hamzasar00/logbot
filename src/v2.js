@@ -388,6 +388,12 @@ function blackjackCards(cards, hideFirst = false) {
   }).join('   ');
 }
 
+function blackjackProgress(score) {
+  const safeScore = Math.min(21, Math.max(0, score));
+  const filled = Math.round((safeScore / 21) * 10);
+  return '🟦'.repeat(filled) + '⬛'.repeat(10 - filled) + ' ' + score + '/21';
+}
+
 function blackjackButtons(userId, finished = false, wager = 100) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('blackjack:hit:' + userId).setLabel('Kart çek').setEmoji('🃏').setStyle(ButtonStyle.Primary).setDisabled(finished),
