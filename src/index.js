@@ -659,6 +659,36 @@ function buildHelpEmbed() {
         inline: false,
       },
       {
+        name: '🛡️ MODERASYON',
+        value: 'Üyeleri uyarma ve otomatik filtreleri yönetme komutlarıdır. Yönetici veya Sunucuyu Yönet yetkisi gerekir.\n\n.uyar @kullanıcı [sebep] — Kullanıcıya uyarı verir.\n\n.uyarilar @kullanıcı / .uyarılar @kullanıcı — Uyarı geçmişindeki son kayıtları gösterir.\n\n.uyarisil @kullanıcı / .uyari-sil @kullanıcı — Kullanıcının uyarılarını temizler.\n\n.filtre durum — Moderasyon ve spam, link, büyük harf, davet filtrelerinin durumunu gösterir.\n.filtre ac | kapat — Otomatik moderasyonu açar veya kapatır.\n.filtre spam|link|caps|invite ac|kapat — Tek bir filtreyi açar/kapatır.\n.filtre kelime-ekle <kelime> / kelime-sil <kelime> — Yasaklı kelime listesine ekler veya çıkarır.',
+        inline: false,
+      },
+      {
+        name: '👋 HOŞ GELDİN & AYRILMA',
+        value: '.hosgeldin durum — Hoş geldin, ayrılma ve otomatik rol ayarlarını gösterir.\n.hosgeldin ac #kanal [mesaj] — Katılan üyelere mesaj gönderimini açar.\n.hosgeldin kapat — Hoş geldin mesajlarını kapatır.\n.hosgeldin ayril #kanal [mesaj] — Ayrılan üyeler için mesaj açar.\n.hosgeldin ayril-kapat — Ayrılma mesajlarını kapatır.\n.hosgeldin rol @rol — Yeni üyeye otomatik verilecek rolü ayarlar.\n.hosgeldin rol-kapat — Otomatik rolü kaldırır.\n\nMesaj şablonları: {user}, {username}, {server}, {count}.',
+        inline: false,
+      },
+      {
+        name: '📈 İSTATİSTİK & LEADERBOARD',
+        value: '.istatistik durum — İstatistiklerin açık/kapalı durumunu ve kayıtları gösterir.\n.istatistik ac | kapat — Mesaj, katılım, ayrılma, ses ve davet takibini açar/kapatır.\n.istatistik [gün] — Son 1-30 günün raporunu gösterir.\n\n.leaderboard metin|ses|davet [limit] — En fazla 10 kişilik sıralama gösterir.\n.leaderboard kur #kanal — Sabit leaderboard panelini kurar ve otomatik yenilemeyi açar.\n.leaderboard yenile — Paneli hemen yeniler.\n.leaderboard kapat — Otomatik yenilemeyi kapatır; panel silinmez.',
+        inline: false,
+      },
+      {
+        name: '🎲 EKONOMİ & OYUN',
+        value: '.bakiye / .balance / .param — Çip bakiyeni gösterir.\n.gunluk / .günlük / .daily — 24 saatte bir günlük çip bonusu verir.\n.blackjack [bahis] / .bj [bahis] — Çip bahisli Blackjack başlatır. Bahis 10-1.000.000 çip arasında olmalıdır; oyun butonlarla oynanır.',
+        inline: false,
+      },
+      {
+        name: '🎖️ SEVİYE SİSTEMİ',
+        value: '.seviye — Seviye, XP ve mesaj profilini gösterir. Başka kullanıcı için: .seviye @kullanıcı.\n.seviye ac | kapat — XP kazanımını açar/kapatır.\n.seviye sıralama [limit] — Seviye sıralamasını gösterir.\n.seviye ayar xp 15 — Mesaj başına XP miktarını ayarlar.\n.seviye ayar cooldown 60 — XP kazanma bekleme süresini saniye olarak ayarlar (5-3600).\n.seviye ayar duyuru #kanal — Seviye atlama duyuru kanalını ayarlar; kanal verilmezse duyuruyu kapatır.\n.seviye ödül 5 @rol — 5. seviyeye ulaşana rol verir.\n.seviye ödül-sil 5 — Seviye ödülünü kaldırır.',
+        inline: false,
+      },
+      {
+        name: '🎧 ÖZEL ODA YÖNETİMİ',
+        value: '.oda-devret @kullanıcı — Sahibi olduğun özel odanın sahipliğini devreder.\n.oda-kilitle — Özel odayı kilitler veya kilidini açar.\n.oda-limit <0-99> — Özel odanın kişi sınırını değiştirir; 0 sınırsızdır.\n\nBu komutlar yalnızca aktif özel odanın sahibi tarafından kullanılabilir.',
+        inline: false,
+      },
+      {
         name: '🔐 YETKİLER',
         value: 'Boost ayarları: Sunucuyu Yönet veya Kanalları Yönet.\nRol ekleme/silme: Rolleri Yönet.\nBot: Mesaj Gönder, Embedleri Kullan, Kanalları Yönet ve rol verecekse bot rolü hedef rollerin üstünde olmalı.',
         inline: false,
