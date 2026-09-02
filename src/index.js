@@ -504,121 +504,8 @@ const ROLE_MENU_PLACEHOLDERS = Object.freeze({
   general: '🎭 | Diğer Rolleri Seçin...',
 });
 
-function getRoleMenuGroups(guildId) {
-  const groups = [...ROLE_MENU_GROUPS];
-  if (getMenuRoles(guildId).some((role) => role.group === 'general')) {
-    groups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
-  }
-  return groups;
-}
-
-function buildRoleSelectRow(guildId, group) {
-  const roles = getGroupRoles(guildId, group.id);
-  const options = roles
-    .map(({ role_id }) => role_id)
-    .map((roleId) => client.guilds.cache.get(guildId)?.roles.cache.get(roleId))
-    .filter((role) => role && !role.managed)
-    .map((role) => ({
-      label: role.name.slice(0, 100),
-      value: role.id,
-      description: 'Rolü almak veya kaldırmak için seç',
-    }));
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('role-select:' + group.id)
-    .setPlaceholder(ROLE_MENU_PLACEHOLDERS[group.id] || (group.emoji + ' | ' + group.label))
-    .setMinValues(1)
-    .setMaxValues(Math.max(options.length, 1));
-
-  if (options.length > 0) {
-    select.addOptions(options);
-  } else {
-    select
-      .setDisabled(true)
-      .addOptions({
-        label: 'Bu kategoride henüz rol yok',
-        value: 'empty:' + group.id,
-      });
-  }
-
-  return new ActionRowBuilder().addComponents(select);
-}
-
-function buildRoleMenuComponents(guildId) {
-  return getRoleMenuGroups(guildId)
-    .slice(0, 5)
-    .map((group) => buildRoleSelectRow(guildId, group));
-}
-
-function buildRoleMenuExtraComponents(guildId) {
-  return getRoleMenuGroups(guildId)
-    .slice(5)
-    .map((group) => buildRoleSelectRow(guildId, group));
-}
-
-function buildRoleMenuPayload(guildId) {
-  return {
-    content: buildRoleMenuContent(),
-    embeds: [],
-    components: buildRoleMenuComponents(guildId),
-    allowedMentions: { parse: [] },
-  };
-}
-
-function buildRoleMenuExtraPayload(guildId) {
-  const components = buildRoleMenuExtraComponents(guildId);
-  return components.length > 0
-    ? { content: '\u200b', components }
-    : null;
-}
-
-function getRoleMenuGroup(groupId) {
-  return ROLE_MENU_GROUPS.find((group) => group.id === groupId) ||
-    (groupId === 'general' ? { id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' } : null);
-}
-
 function getGroupRoles(guildId, groupId) {
   return getMenuRoles(guildId).filter((role) => role.group === groupId).slice(0, 25);
-}
-
-async function handleRoleGroupButton(interaction) {
-  const groupId = interaction.isStringSelectMenu()
-    ? interaction.values[0]
-    : interaction.customId.replace('role-group:', '');
-  const group = getRoleMenuGroup(groupId);
-  const roles = getGroupRoles(interaction.guild.id, groupId);
-  if (!group || roles.length === 0) {
-    await interaction.reply({ content: '❌ Bu kategoride henüz rol bulunmuyor.', ephemeral: true });
-    return;
-  }
-
-  const options = roles
-    .map(({ role_id }) => interaction.guild.roles.cache.get(role_id))
-    .filter((role) => role && !role.managed)
-    .map((role) => ({
-      label: role.name.slice(0, 100),
-      value: role.id,
-      description: interaction.member.roles.cache.has(role.id) ? 'Seçili - kaldırmak için seçimi temizle' : 'Bu rolü almak için seç',
-      default: interaction.member.roles.cache.has(role.id),
-    }));
-
-  if (options.length === 0) {
-    await interaction.reply({ content: '❌ Bu kategoride kullanılabilir rol bulunmuyor.', ephemeral: true });
-    return;
-  }
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('role-select:' + groupId)
-    .setPlaceholder(group.emoji + ' ' + group.label)
-    .setMinValues(0)
-    .setMaxValues(options.length)
-    .addOptions(options);
-
-  await interaction.reply({
-    content: group.emoji + ' ' + group.label + '\nİstediğin rolleri seçip gönder:',
-    components: [new ActionRowBuilder().addComponents(select)],
-    ephemeral: true,
-  });
 }
 
 async function handleRoleSelect(interaction) {
@@ -1391,10 +1278,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    if (interaction.customId.startsWith('role-group:')) {
-      await handleRoleGroupButton(interaction);
-      return;
-    }
 
     // Eski menü mesajlarıyla uyumluluk için admin butonları
     if (interaction.customId === 'role-menu-add') {
@@ -1592,11 +1475,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (interaction.isStringSelectMenu()) {
-    if (interaction.customId === 'role-group-select') {
-      await handleRoleGroupButton(interaction);
-      return;
-    }
-
     if (interaction.customId.startsWith('role-select:')) {
       await handleRoleSelect(interaction);
     }
