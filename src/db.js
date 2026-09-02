@@ -132,7 +132,7 @@ function addRoleToMenu(guildId, roleId, emoji, group = 'general') {
   if (!state.guild_roles[guildId]) state.guild_roles[guildId] = {};
   if (!state.guild_role_groups[guildId]) state.guild_role_groups[guildId] = {};
   state.guild_roles[guildId][roleId] = emoji;
-  state.guild_role_groups[guildId][roleId] = group || 'general';
+  state.guild_role_groups[guildId][roleId] = group === 'relationship' ? 'general' : (group || 'general');
   saveState();
 }
 
@@ -149,7 +149,9 @@ function getMenuRoles(guildId) {
     .map(([role_id, emoji]) => ({
       role_id,
       emoji,
-      group: state.guild_role_groups[guildId]?.[role_id] || 'general',
+      group: state.guild_role_groups[guildId]?.[role_id] === 'relationship'
+        ? 'general'
+        : (state.guild_role_groups[guildId]?.[role_id] || 'general'),
     }));
 }
 
