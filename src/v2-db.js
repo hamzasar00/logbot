@@ -37,6 +37,7 @@ function createGuildDefaults() {
       users: {},
       leaderboard: { enabled: false, channelId: null, messageId: null },
     },
+    blackjack: { channelId: null },
   };
 }
 
@@ -136,6 +137,10 @@ function normalizeGuild(value) {
   for (const [level, roleId] of Object.entries(guild.levels.rewards)) {
     if (!/^[1-9]\d{0,2}$/.test(level) || !/^\d{5,25}$/.test(String(roleId))) delete guild.levels.rewards[level];
   }
+  if (!isPlainObject(guild.blackjack)) guild.blackjack = {};
+  guild.blackjack = mergeDefaults(guild.blackjack, defaults.blackjack);
+  if (guild.blackjack.channelId !== null && typeof guild.blackjack.channelId !== 'string') guild.blackjack.channelId = null;
+
   if (!isPlainObject(guild.levels.users)) guild.levels.users = {};
   for (const [userId, value] of Object.entries(guild.levels.users)) {
     if (!isPlainObject(value)) { delete guild.levels.users[userId]; continue; }
