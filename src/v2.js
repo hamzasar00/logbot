@@ -402,6 +402,67 @@ const leaderboardCategories = {
   invite: { key: 'invites', label: 'Davet', unit: 'davet' },
 };
 
+async function buildLeaderboardEmbed(guild) {
+  const config = getGuild(guild.id);
+  const rows = getLevelLeaderboard(guild.id, 10);
+  const statsUsers = config.stats?.users || {};
+  const description = rows.length
+    ? rows.map((row, index) => {
+      const stats = statsUsers[row.userId] || {};
+      return '**' + (index + 1) + '.** <@' + row.userId + '> — Seviye **' + row.level + '** · ' + row.xp + ' XP\n' +
+        '↳ ' + (stats.messages || row.messages || 0) + ' mesaj · ' + (stats.voiceMinutes || 0) + ' dk ses · ' + (stats.invites || 0) + ' davet';
+    }).join('\n')
+    : 'Henüz seviye verisi oluşmadı. Seviye sistemi açıldığında istatistikler burada görünecek.';
+  return new EmbedBuilder()
+    .setTitle('📊 Sunucu Leaderboard')
+    .setDescription(description.slice(0, 4000))
+    .setColor(0x8B5CF6)
+    .setFooter({ text: 'Seviye sistemi · Panel 60 saniyede bir güncellenir' })
+    .setTimestamp();
+}
+
+async function refreshLeaderboardPanel(guild) {
+  const panel = getGuild(guild.id).levels.leaderboard;
+  if (!panel.enabled || !panel.channelId) return false;
+  const channel = await textChannel(guild, panel.channelId);
+  if (!channel) return false;
+  const embed = await buildLeaderboardEmbed(guild);
+  let message = panel.messageId ? await channel.messages.fetch(panel.messageId).catch(() => null) : null;
+  if (message) {
+    await message.edit({ embeds: [embed] }).catch(() => {});
+    return true;
+  }
+  message = await channel.send({ embeds: [embed] }).catch(() => null);
+  if (!message) return false;
+  updateGuildSection(guild.id, 'levels', { leaderboard: { enabled: true, channelId: channel.id, messageId: message.id } });
+  return true;
+}
+
+async function leaderboardPanelCommand(context, action) {
+  const guild = guildOf(context);
+  if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  if (!isManager(context.member)) return respond(context, { content: 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+  const normalizedAction = String(action || '').toLocaleLowerCase('tr-TR');
+  if (normalizedAction === 'kur') {
+    const channel = channelOf(context);
+    if (!channel || !channel.isTextBased()) return respond(context, { content: 'Kullanım: .leaderboard kur #kanal', ephemeral: true });
+    updateGuildSection(guild.id, 'levels', { leaderboard: { enabled: true, channelId: channel.id, messageId: null } });
+    const refreshed = await refreshLeaderboardPanel(guild);
+    return respond(context, { content: refreshed ? '✅ Leaderboard paneli ' + channel + ' kanalına kuruldu ve otomatik güncellemeler açıldı.' : '❌ Leaderboard mesajı oluşturulamadı. Botun kanalda mesaj gönderme iznini kontrol et.', ephemeral: true });
+  }
+  const panel = getGuild(guild.id).levels.leaderboard;
+  if (normalizedAction === 'yenile') {
+    if (!panel.enabled) return respond(context, { content: 'Leaderboard paneli kurulu değil. Önce .leaderboard kur #kanal kullan.', ephemeral: true });
+    const refreshed = await refreshLeaderboardPanel(guild);
+    return respond(context, { content: refreshed ? '✅ Leaderboard paneli yenilendi.' : '❌ Leaderboard paneli yenilenemedi.', ephemeral: true });
+  }
+  if (normalizedAction === 'kapat') {
+    updateGuildSection(guild.id, 'levels', { leaderboard: { enabled: false } });
+    return respond(context, { content: '✅ Leaderboard otomatik güncellemesi kapatıldı. Panel mesajı silinmedi.', ephemeral: true });
+  }
+  return respond(context, { content: 'Kullanım: .leaderboard kur #kanal, .leaderboard yenile veya .leaderboard kapat', ephemeral: true });
+}
+
 async function leaderboardCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
@@ -502,6 +563,7 @@ const slashCommands = [
   { name: 'hosgeldin', description: 'Hoş geldin ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'ayril', value: 'ayril' }, { name: 'ayril-kapat', value: 'ayril-kapat' }, { name: 'rol', value: 'rol' }, { name: 'rol-kapat', value: 'rol-kapat' }] }, { name: 'kanal', description: 'Metin kanalı', type: 7, channel_types: [0] }, { name: 'rol', description: 'Otomatik rol', type: 8 }, { name: 'mesaj', description: 'Şablon mesaj', type: 3 }] },
   { name: 'istatistik', description: 'Sunucu istatistikleri', options: [{ name: 'eylem', description: 'İşlem', type: 3, choices: [{ name: 'rapor', value: 'rapor' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }] }, { name: 'gun', description: 'Gün sayısı', type: 4, min_value: 1, max_value: 30 }] },
   { name: 'leaderboard', description: 'Metin, ses ve davet sıralaması', options: [{ name: 'kategori', description: 'Sıralama türü', type: 3, required: true, choices: [{ name: 'metin', value: 'metin' }, { name: 'ses', value: 'ses' }, { name: 'davet', value: 'davet' }] }, { name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
+  { name: 'leaderboard-panel', description: 'Sabit leaderboard panelini yönetir', options: [{ name: 'eylem', description: 'Panel işlemi', type: 3, required: true, choices: [{ name: 'kur', value: 'kur' }, { name: 'yenile', value: 'yenile' }, { name: 'kapat', value: 'kapat' }] }, { name: 'kanal', description: 'Panel kanalı', type: 7, channel_types: [0] }] },
   { name: 'seviye', description: 'Seviye profilini gösterir', options: [{ name: 'user', description: 'Profiline bakılacak kullanıcı', type: 6 }] },
   { name: 'seviye-siralama', description: 'Seviye sıralamasını gösterir', options: [{ name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
   { name: 'oda-devret', description: 'Özel oda sahipliğini devreder', options: [{ name: 'user', description: 'Yeni sahip', type: 6, required: true }] },
@@ -524,7 +586,10 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (command === 'filtre') return runV2Command(() => filterCommand(context, args[0], args[1]), context, command);
       if (command === 'hosgeldin' || command === 'hoşgeldin') return runV2Command(() => welcomeCommand(context), context, command);
       if (command === 'istatistik') return runV2Command(() => statsCommand(context), context, command);
-      if (['leaderboard', 'leaderbord', 'liderlik', 'liderboard'].includes(command)) return runV2Command(() => leaderboardCommand(context), context, command);
+      if (['leaderboard', 'leaderbord', 'liderlik', 'liderboard'].includes(command)) {
+        const panelAction = ['kur', 'yenile', 'kapat'].includes((args[0] || '').toLocaleLowerCase('tr-TR')) ? args.shift() : null;
+        return runV2Command(() => panelAction ? leaderboardPanelCommand(context, panelAction) : leaderboardCommand(context), context, command);
+      }
       if (command === 'seviye' || command === 'level') return runV2Command(() => levelCommand(context), context, command);
       if (['seviye-siralama', 'levelboard'].includes(command)) return runV2Command(() => levelLeaderboardCommand(context), context, command);
       if (command === 'oda-devret') return runV2Command(() => roomCommand(context, 'devret'), context, command);
@@ -551,6 +616,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'hosgeldin') return await welcomeCommand(interaction);
       if (name === 'istatistik') return await statsCommand(interaction);
       if (name === 'leaderboard') return await leaderboardCommand(interaction);
+      if (name === 'leaderboard-panel') return await leaderboardPanelCommand(interaction, interaction.options.getString('eylem'));
       if (name === 'seviye') return await levelCommand(interaction);
       if (name === 'seviye-siralama') return await levelLeaderboardCommand(interaction);
       if (name === 'oda-devret') return await roomCommand(interaction, 'devret');
@@ -611,6 +677,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       await snapshotInvites(guild);
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => console.error('V2 slash komutları kaydedilemedi:', error.message));
+      await refreshLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli yenilenemedi:', error.message));
     }
     console.log('V2/V3 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik, seviye ve slash komutları.');
   });
@@ -622,6 +689,12 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       console.error('V2 otomatik kayıt hatası:', error);
     }
   }, 30000);
+
+  setInterval(async () => {
+    for (const guild of client.guilds.cache.values()) {
+      await refreshLeaderboardPanel(guild).catch((error) => console.error('Leaderboard otomatik güncelleme hatası:', error.message));
+    }
+  }, 60000);
 }
 
 module.exports = { initializeV2 };
