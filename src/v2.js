@@ -350,7 +350,7 @@ const BLACKJACK_RANKS = [
 function createBlackjackDeck() {
   const deck = [];
   for (const suit of BLACKJACK_SUITS) {
-    for (const rank of BLACKJACK_RANKS) deck.push({ label: rank.label + suit, value: rank.value });
+    for (const rank of BLACKJACK_RANKS) deck.push({ rank: rank.label, suit, label: rank.label + suit, value: rank.value });
   }
   for (let index = deck.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
@@ -369,14 +369,23 @@ function blackjackScore(cards) {
   return total;
 }
 
-function blackjackCards(cards, hideFirst = false) {
-  return cards.map((card, index) => hideFirst && index === 0 ? '[ 🂠 ]' : '[ ' + card.label + ' ]').join('  ');
+const BLACKJACK_CARD_GLYPHS = {
+  '♠': { A: '🂡', 2: '🂢', 3: '🂣', 4: '🂤', 5: '🂥', 6: '🂦', 7: '🂧', 8: '🂨', 9: '🂩', 10: '🂪', J: '🂫', Q: '🂭', K: '🂮' },
+  '♥': { A: '🂱', 2: '🂲', 3: '🂳', 4: '🂴', 5: '🂵', 6: '🂶', 7: '🂷', 8: '🂸', 9: '🂹', 10: '🂺', J: '🂻', Q: '🂽', K: '🂾' },
+  '♦': { A: '🃁', 2: '🃂', 3: '🃃', 4: '🃄', 5: '🃅', 6: '🃆', 7: '🃇', 8: '🃈', 9: '🃉', 10: '🃊', J: '🃋', Q: '🃍', K: '🃎' },
+  '♣': { A: '🃑', 2: '🃒', 3: '🃓', 4: '🃔', 5: '🃕', 6: '🃖', 7: '🃗', 8: '🃘', 9: '🃙', 10: '🃚', J: '🃛', Q: '🃝', K: '🃞' },
+};
+
+function blackjackCardFace(card, hidden = false) {
+  if (hidden) return '🂠';
+  return BLACKJACK_CARD_GLYPHS[card.suit]?.[card.rank] || card.label;
 }
 
-function blackjackProgress(score) {
-  const safeScore = Math.min(21, Math.max(0, score));
-  const filled = Math.round((safeScore / 21) * 10);
-  return '🟦'.repeat(filled) + '⬛'.repeat(10 - filled) + ' ' + score + '/21';
+function blackjackCards(cards, hideFirst = false) {
+  return cards.map((card, index) => {
+    const face = blackjackCardFace(card, hideFirst && index === 0);
+    return face + ' ' + (hideFirst && index === 0 ? 'Kapalı kart' : card.label);
+  }).join('   ');
 }
 
 function blackjackButtons(userId, finished = false, wager = 100) {
@@ -397,9 +406,10 @@ function blackjackEmbed(game, finished = false, resultText = '') {
   const dealerScore = blackjackScore(game.dealer);
   const status = resultText || 'Hamleni seç: kart çek veya dur.';
   const color = finished ? (resultText?.includes('Kazandın') || resultText?.includes('Blackjack') ? 0x22C55E : resultText?.includes('patladı') || resultText?.includes('kaybettin') || resultText?.includes('Dağıtıcı kazandı') ? 0xEF4444 : 0xF59E0B) : 0x7C3AED;
-  const mono = String.fromCharCode(96).repeat(3);
   const lineBreak = String.fromCharCode(10);
-  const table = mono + lineBreak + '╭──────── 🃏 BLACKJACK MASASI ────────╮' + lineBreak +
+  const mono = String.fromCharCode(96).repeat(3);
+  const table = mono + lineBreak +
+    '╭──────── 🃏 BLACKJACK MASASI ────────╮' + lineBreak +
     '│ 🏦 DAĞITICI  ' + (finished ? String(dealerScore).padStart(2, ' ') : ' ?') + '  ' + blackjackCards(game.dealer, !finished) + lineBreak +
     '│ 🎯 OYUNCU    ' + String(playerScore).padStart(2, ' ') + '  ' + blackjackCards(game.player) + lineBreak +
     '╰─────────────────────────────────────╯' + lineBreak + mono;
@@ -408,12 +418,12 @@ function blackjackEmbed(game, finished = false, resultText = '') {
     .setDescription(table + lineBreak + '🎯 Senin ilerlemen' + lineBreak + blackjackProgress(playerScore))
     .setColor(color)
     .addFields(
-      { name: '🎯 Oyuncu eli', value: blackjackCards(game.player) + lineBreak + 'Toplam: **' + playerScore + '**', inline: true },
-      { name: '🏦 Dağıtıcı eli', value: blackjackCards(game.dealer, !finished) + lineBreak + 'Toplam: **' + (finished ? dealerScore : '?') + '**', inline: true },
+      { name: '🎯 Oyuncu eli · ' + playerScore, value: blackjackCards(game.player) + lineBreak + 'Toplam: **' + playerScore + '**', inline: false },
+      { name: '🏦 Dağıtıcı eli · ' + (finished ? dealerScore : '?'), value: blackjackCards(game.dealer, !finished) + lineBreak + 'Toplam: **' + (finished ? dealerScore : '?') + '**', inline: false },
       { name: '💰 Bahis', value: formatChips(game.wager), inline: true },
-      { name: '📌 Durum', value: status, inline: false }
+      { name: '📌 Durum', value: status, inline: true }
     )
-    .setFooter({ text: finished ? 'Oyun tamamlandı · Yeni oyun butonuna basabilirsin' : 'Bahis: ' + formatChips(game.wager) + ' · 5 dakika içinde hamle yap' });
+    .setFooter({ text: finished ? 'Oyun tamamlandı · Yeni oyun butonuna basabilirsin' : 'Bahis: ' + formatChips(game.wager) + ' · Kart çek veya dur' });
 }
 
 function blackjackOutcome(game) {
