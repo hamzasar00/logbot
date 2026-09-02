@@ -819,7 +819,7 @@ const slashCommands = [
   { name: 'oda-limit', description: 'Özel oda limitini değiştirir', options: [{ name: 'limit', description: '0 sınırsızdır', type: 4, required: true, min_value: 0, max_value: 99 }] },
 ];
 
-function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
+function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
   client.on(Events.MessageCreate, async (message) => {
     try {
       if (message.author.bot || !message.guild) return;
@@ -955,4 +955,4 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
   }, 60000);
 }
 
-module.exports = { initializeV2 };
+module.exports = { initializeV3 };
