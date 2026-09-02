@@ -87,7 +87,7 @@ async function runV2Command(handler, context, label) {
   try {
     return await handler();
   } catch (error) {
-    console.error('V2 ' + label + ' hatası:', error);
+    console.error('V3 ' + label + ' hatası:', error);
     if (isInteraction(context) && !context.replied && !context.deferred) {
       await context.reply({ content: '❌ Komut çalıştırılırken hata oluştu.', ephemeral: true }).catch(() => {});
     }
@@ -847,10 +847,10 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (command === 'oda-limit') return runV2Command(() => roomCommand(context, 'limit'), context, command);
     }
     recordStat(message.guild.id, 'messages', 1, message.author.id);
-      await applyModeration(message, sendLog).catch((error) => console.error('V2 moderasyon hatası:', error.message));
+      await applyModeration(message, sendLog).catch((error) => console.error('V3 moderasyon hatası:', error.message));
       await awardLevelXp(message).catch((error) => console.error('V3 seviye XP hatası:', error.message));
     } catch (error) {
-      console.error('V2 mesaj handler hatası:', error);
+      console.error('V3 mesaj handler hatası:', error);
     }
   });
 
@@ -879,7 +879,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'oda-kilitle') return await roomCommand(interaction, 'kilitle');
       if (name === 'oda-limit') return await roomCommand(interaction, 'limit');
     } catch (error) {
-      console.error('V2 slash komut hatası:', error);
+      console.error('V3 slash komut hatası:', error);
       if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Komut çalıştırılırken hata oluştu.', ephemeral: true }).catch(() => {});
     }
   });
@@ -897,7 +897,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     }
       if (config.welcome.autoRoleId) await member.roles.add(config.welcome.autoRoleId).catch(() => {});
     } catch (error) {
-      console.error('V2 üye katılım handler hatası:', error);
+      console.error('V3 üye katılım handler hatası:', error);
     }
   });
 
@@ -909,7 +909,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     const channel = await textChannel(member.guild, config.welcome.leaveChannelId);
       if (channel) await channel.send({ content: formatMessage(config.welcome.leaveMessage, member) }).catch((error) => console.error('Ayrılma mesajı gönderilemedi:', error.message));
     } catch (error) {
-      console.error('V2 üye ayrılma handler hatası:', error);
+      console.error('V3 üye ayrılma handler hatası:', error);
     }
   });
 
@@ -924,7 +924,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
         else voiceStarted.delete(key);
       }
     } catch (error) {
-      console.error('V2 ses istatistik handler hatası:', error);
+      console.error('V3 ses istatistik handler hatası:', error);
     }
   });
 
@@ -932,18 +932,18 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
     for (const guild of client.guilds.cache.values()) {
       await snapshotInvites(guild);
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
-        .catch((error) => console.error('V2 slash komutları kaydedilemedi:', error.message));
+        .catch((error) => console.error('V3 slash komutları kaydedilemedi:', error.message));
       await refreshLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli yenilenemedi:', error.message));
       await ensureBlackjackChannel(guild);
     }
-    console.log('V2/V3 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik, seviye ve slash komutları.');
+    console.log('V3 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik, seviye ve slash komutları.');
   });
 
   setInterval(() => {
     try {
       saveState();
     } catch (error) {
-      console.error('V2 otomatik kayıt hatası:', error);
+      console.error('V3 otomatik kayıt hatası:', error);
     }
   }, 30000);
 
@@ -954,4 +954,4 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
   }, 60000);
 }
 
-module.exports = { initializeV2 };
+module.exports = { initializeV3 };
