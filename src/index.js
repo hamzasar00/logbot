@@ -457,7 +457,7 @@ function buildHelpEmbed() {
       },
       {
         name: '.roller',
-        value: 'Rol seçim menüsünü açar. Üyeler dropdown\'dan rol seçer/çıkarırlar (toggle sistemi).',
+        value: 'Rol seçim menüsünü açar. Üyeler dropdown\'dan rol alırlar.',
         inline: false,
       },
       {
@@ -583,7 +583,6 @@ function getGroupRoles(guildId, groupId) {
 }
 
 async function handleRoleSelect(interaction) {
-  const groupId = interaction.customId.replace('role-select:', '');
   const selectedRoleIds = interaction.values.filter((value) => !value.startsWith('empty:'));
   const botMember = interaction.guild.members.me;
 
@@ -593,8 +592,9 @@ async function handleRoleSelect(interaction) {
   }
 
   let added = 0;
-  let removed = 0;
+  let alreadyHad = 0;
   let skipped = 0;
+
   for (const roleId of selectedRoleIds) {
     const role = interaction.guild.roles.cache.get(roleId);
     if (!role || role.managed || !role.editable) {
@@ -604,20 +604,21 @@ async function handleRoleSelect(interaction) {
 
     try {
       if (interaction.member.roles.cache.has(role.id)) {
-        await interaction.member.roles.remove(role.id);
-        removed += 1;
+        alreadyHad += 1;
       } else {
         await interaction.member.roles.add(role.id);
         added += 1;
       }
     } catch (error) {
       skipped += 1;
-      console.error('Rol seçim hatası:', error.message);
+      console.error('Rol verme hatası:', error.message);
     }
   }
 
-  const suffix = skipped ? '\n⚠️ ' + skipped + ' rol bot tarafından yönetilemiyor.' : '';
-  await interaction.reply({ content: '✅ ' + added + ' rol eklendi, ' + removed + ' rol kaldırıldı.' + suffix, ephemeral: true });
+  let content = '✅ ' + added + ' rol verildi.';
+  if (alreadyHad) content += ' ' + alreadyHad + ' rol zaten sende.';
+  if (skipped) content += '\n⚠️ ' + skipped + ' rol bot tarafından verilemiyor.';
+  await interaction.reply({ content, ephemeral: true });
 }
 
 function buildRoomMenuComponents() {
