@@ -26,6 +26,8 @@ const {
   getRoleEmoji,
   saveRoleMenuMessage,
   getRoleMenuMessage,
+  saveBoostSetting,
+  getBoostSetting,
 } = require('./db');
 
 const client = new Client({
@@ -42,6 +44,37 @@ const client = new Client({
 });
 
 const PREFIX = '.';
+
+const ROLE_MENU_GROUPS = Object.freeze([
+  { id: 'event', emoji: '🎉', label: 'Etkinlik Rolleri Seç' },
+  { id: 'color', emoji: '🎨', label: 'Renk Rolleri Seç' },
+  { id: 'zodiac', emoji: '⭐', label: 'Burç Rolleri Seç' },
+  { id: 'game', emoji: '🎮', label: 'Oyun Rolleri Seç' },
+  { id: 'team', emoji: '⚽', label: 'Takım Rolleri Seç' },
+]);
+
+const ROLE_GROUP_ALIASES = Object.freeze({
+  etkinlik: 'event', event: 'event',
+  renk: 'color', color: 'color',
+  burç: 'zodiac', burc: 'zodiac', zodiac: 'zodiac',
+  oyun: 'game', game: 'game',
+  takım: 'team', takim: 'team', team: 'team',
+  genel: 'general', diğer: 'general', diger: 'general', general: 'general',
+});
+
+const ROLE_GROUP_EMOJIS = Object.freeze({
+  event: '🎉',
+  color: '🎨',
+  zodiac: '⭐',
+  game: '🎮',
+  team: '⚽',
+  general: '🎭',
+});
+
+function normalizeRoleGroup(value) {
+  const key = String(value || '').trim().toLocaleLowerCase('tr-TR');
+  return ROLE_GROUP_ALIASES[key] || 'general';
+}
 const LOG_DEFINITIONS = getLogDefinitions();
 const rest = new REST({ version: '10' }).setToken(discordToken);
 const inviteSnapshots = new Map();
@@ -255,6 +288,162 @@ async function sendLog(guildId, logGroupKey, embed) {
   await channel.send({ embeds: [embed] });
 }
 
+function buildBoostNotificationEmbed(member) {
+  const title = getBoostSetting(member.guild.id, 'title') || 'Thank You Buddy';
+  const message = getBoostSetting(member.guild.id, 'message') || 'Welcome To Real CLR LEAK\nLEAK Buddy';
+  const gifUrl = getBoostSetting(member.guild.id, 'gif_url');
+  const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 128 });
+
+  const embed = new EmbedBuilder()
+    .setColor(Colors.Red)
+    .setAuthor({ name: member.user.username, iconURL: avatarUrl })
+    .setTitle(title)
+    .setDescription('<@' + member.user.id + '> ' + message)
+    .setThumbnail(avatarUrl)
+    .setTimestamp();
+
+  if (gifUrl) {
+    embed.setImage(gifUrl);
+  }
+
+  return embed;
+}
+
+function hasManageBoostPermission(message) {
+  return message.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild) ||
+    message.member?.permissions?.has(PermissionsBitField.Flags.ManageChannels);
+}
+
+async function handleBoostChannelCommand(message) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const channel = message.mentions.channels.first();
+  if (!channel || !channel.isTextBased()) {
+    await message.reply('Kullanım: .boost-kanal #kanal');
+    return;
+  }
+
+  saveLogChannel(message.guild.id, 'boost', channel.id);
+  await message.reply('✅ Boost bildirim kanalı ' + channel + ' olarak ayarlandı.');
+}
+
+async function handleBoostGifCommand(message, args) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const firstArg = args[0]?.toLocaleLowerCase('tr-TR');
+  if (firstArg === 'kaldır' || firstArg === 'kaldir') {
+    saveBoostSetting(message.guild.id, 'gif_url', null);
+    await message.reply('✅ Boost GIF bağlantısı kaldırıldı.');
+    return;
+  }
+
+  const gifUrl = args[0] || message.attachments.first()?.url;
+  if (!gifUrl) {
+    await message.reply('Kullanım: .boost-gif https://... veya GIF dosyasını mesaja ekle.');
+    return;
+  }
+
+  try {
+    const parsedUrl = new URL(gifUrl);
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('invalid protocol');
+  } catch {
+    await message.reply('❌ Geçerli bir HTTP/HTTPS GIF bağlantısı veya dosyası kullan.');
+    return;
+  }
+
+  saveBoostSetting(message.guild.id, 'gif_url', gifUrl);
+  await message.reply('✅ Boost GIF bağlantısı kaydedildi.');
+}
+
+async function handleBoostTestCommand(message) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu test için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const channelId = getLogChannel(message.guild.id, 'boost');
+  if (!channelId) {
+    await message.reply('❌ Önce .boost-kanal #kanal ile boost kanalını ayarla.');
+    return;
+  }
+
+  const channel = message.guild.channels.cache.get(channelId) ||
+    await message.guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    await message.reply('❌ Kayıtlı boost kanalı bulunamadı. .boost-kanal #kanal ile tekrar ayarla.');
+    return;
+  }
+
+  try {
+    await channel.send({ embeds: [buildBoostNotificationEmbed(message.member)] });
+    await message.reply('✅ Test boost bildirimi ' + channel + ' kanalına gönderildi.');
+  } catch (error) {
+    console.error('Boost test gönderme hatası:', error);
+    await message.reply('❌ Test bildirimi gönderilemedi. Botun kanalda Mesaj Gönder ve Embed Links izinlerini kontrol et.');
+  }
+}
+
+async function handleBoostTitleCommand(message, args) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const title = args.join(' ').trim();
+  if (!title) {
+    await message.reply('Kullanım: .boost-baslik Thank You Buddy');
+    return;
+  }
+
+  saveBoostSetting(message.guild.id, 'title', title.slice(0, 256));
+  await message.reply('✅ Boost başlığı kaydedildi.');
+}
+
+async function handleBoostMessageCommand(message, args) {
+  if (!message.guild) {
+    await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+  if (!hasManageBoostPermission(message)) {
+    await message.reply('❌ Bu ayar için Sunucuyu Yönet veya Kanalları Yönet izni gerekir.');
+    return;
+  }
+
+  const text = args.join(' ').trim();
+  if (!text) {
+    await message.reply('Kullanım: .boost-mesaj Welcome To Real CLR LEAK | LEAK Buddy');
+    return;
+  }
+
+  saveBoostSetting(message.guild.id, 'message', text.replace(/\s*\|\s*/g, '\n').slice(0, 4096));
+  await message.reply('✅ Boost mesajı kaydedildi.');
+}
+
 async function getAuditLogInfo(guild, targetId, eventTypes) {
   if (!guild || !targetId || !eventTypes) {
     return { executor: 'Bilinmeyen', reason: 'Sebep belirtilmedi' };
@@ -357,7 +546,7 @@ async function handleSetupCommand(message) {
 
   const embed = new EmbedBuilder()
     .setTitle('✅ Log Sistemi Ayarlandı')
-    .setDescription('Tek kategori ve 7 log kanalı hazırlandı. Oda oluşturma menüsü de hazır.')
+    .setDescription('Tek kategori ve 8 log kanalı hazırlandı. Oda oluşturma menüsü de hazır.')
     .setColor(Colors.Green)
     .addFields({
       name: '📁 Ana Kategori',
@@ -385,66 +574,108 @@ async function handleLogCommand(message) {
 
 function buildHelpEmbed() {
   return new EmbedBuilder()
-    .setTitle('🆘 Yardım Menüsü')
-    .setDescription('Bu bot, sunucudaki log olaylarını otomatik olarak izler ve ayrı kanallara gönderir. Ayrıca rol ve ses odası yönetimi yapabilir.')
+    .setTitle('🆘 Detaylı Yardım')
+    .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Aşağıdaki komutlar nokta (.) prefixi ile kullanılır.')
     .setColor(Colors.Blurple)
     .addFields(
       {
-        name: '📋 LOG KOMUTLARı',
-        value: '** **',
+        name: '🚀 Hızlı Başlangıç',
+        value: '1. .setup yaz ve temel kanalları oluştur.\n2. .log ile log panelini aç.\n3. .boost-kanal #kanal ile boost kanalını seç.\n4. .roller ile rol menüsünü hazırla.',
         inline: false,
       },
       {
-        name: '.setup',
-        value: 'Sunucuda otomatik olarak LOGLAR kategorisini oluşturur. İçinde: `uye-log`, `mesaj-log`, `rol-log`, `kanal-log`, `ses-log`, `moderasyon-log`, `sunucu-log` kanalları hazır olur.',
+        name: '📋 .setup',
+        value: 'LOGLAR kategorisini ve uye-log, mesaj-log, rol-log, kanal-log, ses-log, moderasyon-log, sunucu-log ve boost-log kanallarını hazırlar. Oda ve rol menüsü altyapısını da kontrol eder.',
         inline: false,
       },
       {
-        name: '.log',
-        value: 'Log kontrol panelini açar. Her log türü için ayrı aç/kapat butonu ve kanal seçme menüsü bulunur. Her log tamamen bağımsız çalışır.',
+        name: '📊 .log',
+        value: 'Log kontrol panelini açar. Her log türünü ayrı ayrı açıp kapatabilir ve kanalını seçim menüsünden değiştirebilirsin. Log türleri: üye, mesaj, rol, kanal, ses, moderasyon, sunucu ve boost.',
         inline: false,
       },
       {
-        name: '🎧 SES ODASI KOMUTLARı',
-        value: '** **',
+        name: '🎁 BOOST BİLDİRİMLERİ',
+        value: 'Boost geldiğinde seçtiğin kanala kırmızı kenarlı embed, boost yapan kişinin avatarı, başlık, mesaj ve GIF gönderilir.',
         inline: false,
       },
       {
-        name: '.oda',
-        value: 'Özel oda oluşturma menüsünü ayrı kanalda gösterir. Üyelerin ses odası oluşturmak için kullandığı buton buradan açılır.',
+        name: '.boost-kanal #kanal',
+        value: 'Boost bildirimlerinin gönderileceği kanalı seçer. Örnek: .boost-kanal #boost\nGereken izin: Sunucuyu Yönet veya Kanalları Yönet.',
         inline: false,
       },
       {
-        name: '👥 ROL KOMUTLARı',
-        value: '** **',
+        name: '.boost-gif bağlantı',
+        value: 'Boost embedinde gösterilecek GIF bağlantısını kaydeder. Direkt GIF bağlantısı kullan veya GIF dosyasını mesaja ekle. Kaldırmak için: .boost-gif kaldır',
         inline: false,
       },
       {
-        name: '.roller-ekle @rol :emoji:',
-        value: 'Rolü menüye ekler. Örnek: `.roller-ekle @Oyuncu 🎮`',
+        name: '.boost-test',
+        value: 'Mevcut boost ayarlarıyla test bildirimi gönderir; gerçek boost gerekmez.',
+        inline: false,
+      },
+      {
+        name: '.boost-baslik metin',
+        value: 'Boost embed başlığını değiştirir. Örnek: .boost-baslik Thank You Buddy',
+        inline: false,
+      },
+      {
+        name: '.boost-mesaj metin',
+        value: 'Boost embed açıklamasını değiştirir. | işareti yeni satır oluşturur. Örnek: .boost-mesaj Welcome To Real CLR LEAK | LEAK Buddy',
+        inline: false,
+      },
+      {
+        name: '👥 ROL MENÜSÜ',
+        value: 'Üyeler menüdeki seçimlerden rol alabilir. Menü üzerinden rol kaldırma sistemi yoktur; seçim sadece rol verir.',
+        inline: false,
+      },
+      {
+        name: '.roller-ekle @rol kategori',
+        value: 'Rolü seçim menüsüne ekler. Emoji otomatik gelir. Kategoriler: etkinlik, renk, burç, oyun, takım. Örnek: .roller-ekle @Oyuncu oyun\nKısa kullanım: .rol-ekle @Oyuncu oyun',
         inline: false,
       },
       {
         name: '.roller',
-        value: 'Rol seçim menüsünü açar. Üyeler dropdown\'dan rol seçer/çıkarırlar (toggle sistemi).',
+        value: 'Rol seçim menüsünü gönderir veya mevcut rol-menusu kanalını günceller. Üyeler dropdown üzerinden yalnızca rol alabilir.',
+        inline: false,
+      },
+      {
+        name: '.roller-menu',
+        value: 'Rol menüsü kanalını hazırlar ve yeniler. Menü kanalı kategori olmadan rol-menusu adıyla kullanılır.',
         inline: false,
       },
       {
         name: '.roller-sil @rol',
-        value: 'Rolü menüden kaldırır. Örnek: `.roller-sil @Oyuncu`',
+        value: 'Belirtilen rolü seçim menüsünden çıkarır. Rolün kendisini sunucudan silmez. Gereken izin: Rolleri Yönet.',
         inline: false,
       },
       {
-        name: '.yardım / .help',
-        value: 'Bu yardım menüsünü gösterir.',
+        name: '🎧 SES ODASI',
+        value: 'Özel ses odaları üyelerin kendi odalarını oluşturmasına izin verir. Oda sahibi ayrıldığında oda otomatik kapatılır.',
         inline: false,
       },
       {
-        name: '📌 Önemli Notlar',
-        value: '• Log kanalı değiştirildiğinde olaylar yeni kanala gönderilir.\n• Her log bağımsız olarak açılıp kapatılabilir.\n• Özel oda oluşturulduktan sonra sahibi ayrıldığında otomatik kapanır.\n• Rol menüsüne rol eklemek için admin yetkiniz olmalı.',
+        name: '.oda',
+        value: 'Oda oluşturma panelini hazırlar. Üye paneldeki butona basarak kendi özel ses odasını açabilir; oda sahibi kullanıcı seçme menüleriyle erişim verebilir veya kaldırabilir.',
         inline: false,
-      }
-    );
+      },
+      {
+        name: '🔐 YETKİLER',
+        value: 'Boost ayarları: Sunucuyu Yönet veya Kanalları Yönet.\nRol ekleme/silme: Rolleri Yönet.\nBot: Mesaj Gönder, Embedleri Kullan, Kanalları Yönet ve rol verecekse bot rolü hedef rollerin üstünde olmalı.',
+        inline: false,
+      },
+      {
+        name: '🧾 LOG DETAYLARI',
+        value: 'Üye: giriş, çıkış ve profil değişiklikleri. Mesaj: silme ve düzenleme. Rol: rol verme/alma. Kanal: oluşturma, silme ve düzenleme. Ses: giriş, çıkış ve taşıma. Moderasyon: timeout ve ban işlemleri. Sunucu: sunucu ayarları. Boost: yeni boost bildirimleri.',
+        inline: false,
+      },
+      {
+        name: 'ℹ️ KULLANIM NOTLARI',
+        value: 'Komutlar yalnızca sunucu içinde çalışır. Prefix: .\nYardım kısayolları: .help, .yardım, .yardim\nEski ilişki kategorisindeki roller Diğer kategorisine alınır. Ayarlar data/bot-data.json dosyasında saklanır.',
+        inline: false,
+      },
+    )
+    .setFooter({ text: 'Detaylı komut rehberi' })
+    .setTimestamp();
 }
 
 function buildRoomMenuEmbed() {
@@ -458,74 +689,136 @@ function buildRoomMenuEmbed() {
     );
 }
 
-function buildStaticRoleMenuEmbed(guildId) {
-  const roles = getMenuRoles(guildId);
-  
-  const embed = new EmbedBuilder()
-    .setTitle('👥 Rol Seçim Menüsü')
-    .setColor(Colors.Purple);
+function buildRoleMenuContent() {
+  return [
+    '📣 Sunucuda etiket atıp rahatsızlık vermemek için @everyone ve @here kullanmayınız.',
+    'o yüzden çekiliş ve etkinlik katılımcısı rollerinizi almayı unutmayın.',
+    '',
+    '• Etkinlik Katılımcısı: Sunucuda düzenlenen tüm etkinliklere katılmak için.',
+    '• Çekiliş Katılımcısı: Sunucuda düzenlenen tüm çekilişlere katılmak için.',
+    '',
+    '> **Not:** Renk rollerini alabilmek için "Booster veya Family" rolleri gerekmektedir.',
+  ].join('\n');
+}
 
-  // Admin Bölümü
-  embed.addFields(
-    { name: '⚙️ ADMIN PANELİ', value: '** **', inline: false },
-    { name: 'Roller Ekle/Sil', value: 'Aşağıdaki butonları kullan', inline: false }
-  );
+const ROLE_MENU_PLACEHOLDERS = Object.freeze({
+  event: '🎉 | Etkinlik Rolleri Seçin',
+  color: '🎨 | Renk Rolleri Seçin...',
+  zodiac: '⭐ | Burç Rolleri Seçin...',
+  game: '🎮 | Oyun Rolleri Seçin',
+  team: '⚽ | Takım Rolleri Seçin...',
+  general: '🎭 | Diğer Rolleri Seçin...',
+});
 
-  // Üye Bölümü
-  if (roles.length === 0) {
-    embed.addFields(
-      { name: '👤 ÜYELER İÇİN', value: '❌ Henüz rol eklenmemiş', inline: false }
-    );
+function getRoleMenuGroups(guildId) {
+  const groups = [...ROLE_MENU_GROUPS];
+  if (getMenuRoles(guildId).some((role) => role.group === 'general')) {
+    groups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
+  }
+  return groups;
+}
+
+function buildRoleSelectRow(guildId, group) {
+  const roles = getGroupRoles(guildId, group.id);
+  const options = roles
+    .map(({ role_id }) => role_id)
+    .map((roleId) => client.guilds.cache.get(guildId)?.roles.cache.get(roleId))
+    .filter((role) => role && !role.managed)
+    .map((role) => ({
+      label: role.name.slice(0, 100),
+      value: role.id,
+      description: 'Rolü almak veya kaldırmak için seç',
+    }));
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('role-select:' + group.id)
+    .setPlaceholder(ROLE_MENU_PLACEHOLDERS[group.id] || (group.emoji + ' | ' + group.label))
+    .setMinValues(1)
+    .setMaxValues(Math.max(options.length, 1));
+
+  if (options.length > 0) {
+    select.addOptions(options);
   } else {
-    embed.addFields(
-      { name: '👤 ÜYELER İÇİN', value: 'Almak istediğin rolü seç (toggle sistemi)', inline: false }
-    );
+    select
+      .setDisabled(true)
+      .addOptions({
+        label: 'Bu kategoride henüz rol yok',
+        value: 'empty:' + group.id,
+      });
   }
 
-  return embed;
+  return new ActionRowBuilder().addComponents(select);
 }
 
 function buildRoleMenuComponents(guildId) {
-  const roles = getMenuRoles(guildId);
-  const components = [];
+  return getRoleMenuGroups(guildId)
+    .slice(0, 5)
+    .map((group) => buildRoleSelectRow(guildId, group));
+}
 
-  // Admin Bölümü Butonları
-  const adminRow = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('role-menu-add')
-      .setLabel('➕ Rol Ekle')
-      .setStyle(ButtonStyle.Green),
-    new ButtonBuilder()
-      .setCustomId('role-menu-remove')
-      .setLabel('➖ Rol Sil')
-      .setStyle(ButtonStyle.Red),
-    new ButtonBuilder()
-      .setCustomId('role-menu-refresh')
-      .setLabel('🔄 Menüyü Güncelle')
-      .setStyle(ButtonStyle.Secondary)
-  );
-  components.push(adminRow);
+function buildRoleMenuExtraComponents(guildId) {
+  return getRoleMenuGroups(guildId)
+    .slice(5)
+    .map((group) => buildRoleSelectRow(guildId, group));
+}
 
-  // Üye Bölümü Butonları
-  if (roles.length > 0) {
-    for (let i = 0; i < roles.length; i += 5) {
-      const chunk = roles.slice(i, i + 5);
-      const userRow = new ActionRowBuilder();
+function buildRoleMenuPayload(guildId) {
+  return {
+    content: buildRoleMenuContent(),
+    embeds: [],
+    components: buildRoleMenuComponents(guildId),
+    allowedMentions: { parse: [] },
+  };
+}
 
-      for (const { role_id, emoji } of chunk) {
-        userRow.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`role-toggle:${role_id}`)
-            .setLabel(`${emoji}`)
-            .setStyle(ButtonStyle.Primary)
-        );
+function buildRoleMenuExtraPayload(guildId) {
+  const components = buildRoleMenuExtraComponents(guildId);
+  return components.length > 0
+    ? { content: '\u200b', components }
+    : null;
+}
+
+function getGroupRoles(guildId, groupId) {
+  return getMenuRoles(guildId).filter((role) => role.group === groupId).slice(0, 25);
+}
+
+async function handleRoleSelect(interaction) {
+  const selectedRoleIds = interaction.values.filter((value) => !value.startsWith('empty:'));
+  const botMember = interaction.guild.members.me;
+
+  if (!botMember?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+    await interaction.reply({ content: '❌ Botta Rolleri Yönet izni yok.', ephemeral: true });
+    return;
+  }
+
+  let added = 0;
+  let alreadyHad = 0;
+  let skipped = 0;
+
+  for (const roleId of selectedRoleIds) {
+    const role = interaction.guild.roles.cache.get(roleId);
+    if (!role || role.managed || !role.editable) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      if (interaction.member.roles.cache.has(role.id)) {
+        alreadyHad += 1;
+      } else {
+        await interaction.member.roles.add(role.id);
+        added += 1;
       }
-
-      components.push(userRow);
+    } catch (error) {
+      skipped += 1;
+      console.error('Rol verme hatası:', error.message);
     }
   }
 
-  return components;
+  let content = '✅ ' + added + ' rol verildi.';
+  if (alreadyHad) content += ' ' + alreadyHad + ' rol zaten sende.';
+  if (skipped) content += '\n⚠️ ' + skipped + ' rol bot tarafından verilemiyor.';
+  await interaction.reply({ content, ephemeral: true });
 }
 
 function buildRoomMenuComponents() {
@@ -606,75 +899,103 @@ async function ensureRoleMenuInternal(guild) {
 
   const roleMenuInfo = getRoleMenuMessage(guild.id);
 
+  const isRoleMenuMessage = (message) =>
+    message?.author?.id === client.user.id && (
+      message.embeds?.some((embed) => embed.title === '👥 Rol Seçim Menüsü') ||
+      message.content?.includes('Sunucuda etiket atıp rahatsızlık vermemek için')
+    );
+
+  const isRoleMenuContinuation = (message) =>
+    message?.author?.id === client.user.id &&
+    message.id !== roleMenuInfo?.messageId &&
+    message.components?.some((row) => row.components?.some((component) =>
+      component.customId?.startsWith('role-select:')
+    ));
+
+  const syncExtraMenu = async (roleChannel, messages) => {
+    const extraPayload = buildRoleMenuExtraPayload(guild.id);
+    const continuation = messages?.find(isRoleMenuContinuation);
+    if (extraPayload) {
+      if (continuation) {
+        await continuation.edit(extraPayload);
+      } else {
+        await roleChannel.send(extraPayload);
+      }
+    }
+  };
+
+  const moveChannelOutOfCategory = async (channel) => {
+    if (channel?.parentId) {
+      await channel.setParent(null, { lockPermissions: false }).catch((error) => {
+        console.error('Rol menüsü kanalı kategori dışına taşınamadı:', error.message);
+      });
+    }
+  };
+
   try {
-    if (roleMenuInfo) {
-      const channel = guild.channels.cache.get(roleMenuInfo.channelId);
-      if (channel && channel.type === ChannelType.GuildText) {
-        const message = await channel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
+    // Sadece rol-menusu kanalı kullanılır; ROLLER kategorisi oluşturulmaz.
+    await guild.channels.fetch().catch(() => null);
+    let roleChannel = null;
+
+    if (roleMenuInfo?.channelId) {
+      const savedChannel = await guild.channels.fetch(roleMenuInfo.channelId).catch(() => null);
+      if (savedChannel?.type === ChannelType.GuildText) {
+        roleChannel = savedChannel;
+        await moveChannelOutOfCategory(roleChannel);
+        const message = await roleChannel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
         if (message) {
-          await message.edit({
-            embeds: [buildStaticRoleMenuEmbed(guild.id)],
-            components: buildRoleMenuComponents(guild.id),
-          });
+          await message.edit(buildRoleMenuPayload(guild.id));
+          const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
+          await syncExtraMenu(roleChannel, messages);
           return;
         }
       }
     }
 
-    const savedRoleCategoryId = getCategoryId(guild.id, 'role');
-    const savedRoleCategory = savedRoleCategoryId ? guild.channels.cache.get(savedRoleCategoryId) : null;
-    let roleCategory = savedRoleCategory?.type === ChannelType.GuildCategory ? savedRoleCategory : guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'ROLLER'
-    );
-
-    if (!roleCategory) {
-      roleCategory = await guild.channels.create({
-        name: 'ROLLER',
-        type: ChannelType.GuildCategory,
-        reason: 'Rol menüsü için kategori oluşturuluyor.',
-      });
+    if (!roleChannel) {
+      roleChannel = guild.channels.cache.find((channel) =>
+        channel.type === ChannelType.GuildText && channel.name === 'rol-menusu'
+      );
     }
-
-    saveCategoryId(guild.id, 'role', roleCategory.id);
-
-    let roleChannel = guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildText && channel.parentId === roleCategory.id && channel.name === 'rol-menusu'
-    );
 
     if (!roleChannel) {
       roleChannel = await guild.channels.create({
         name: 'rol-menusu',
         type: ChannelType.GuildText,
-        parent: roleCategory.id,
-        reason: 'Rol seçim menüsü oluşturuluyor.',
+        reason: 'Kategori olmadan rol seçim menüsü kanalı oluşturuluyor.',
       });
+    } else {
+      await moveChannelOutOfCategory(roleChannel);
     }
 
     const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
-    const existingMenu = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '👥 Rol Seçim Menüsü');
+    const existingMenu = messages?.find(isRoleMenuMessage);
     if (existingMenu) {
-      await existingMenu.edit({
-        embeds: [buildStaticRoleMenuEmbed(guild.id)],
-        components: buildRoleMenuComponents(guild.id),
-      });
+      await existingMenu.edit(buildRoleMenuPayload(guild.id));
       saveRoleMenuMessage(guild.id, roleChannel.id, existingMenu.id);
+      await syncExtraMenu(roleChannel, messages);
       return;
     }
 
-    const newMessage = await roleChannel.send({
-      embeds: [buildStaticRoleMenuEmbed(guild.id)],
-      components: buildRoleMenuComponents(guild.id),
-    });
-
+    const newMessage = await roleChannel.send(buildRoleMenuPayload(guild.id));
     saveRoleMenuMessage(guild.id, roleChannel.id, newMessage.id);
+    await syncExtraMenu(roleChannel, messages);
   } catch (error) {
     console.error('Rol menüsü oluşturma hatası:', error);
+    throw error;
   }
 }
 
 async function ensureRoleMenu(guild) {
-  if (!guild) return;
-  return runGuildTaskOnce(`role-menu:${guild.id}`, () => ensureRoleMenuInternal(guild));
+  if (!guild) return false;
+
+  try {
+    await runGuildTaskOnce(`role-menu:${guild.id}`, () => ensureRoleMenuInternal(guild));
+    return true;
+  } catch (error) {
+    console.error(`[${guild.name}] Rol menüsü hazırlanamadı:`, error.message);
+    return false;
+  }
 }
 
 function getRoomOwnerMap() {
@@ -1043,28 +1364,38 @@ async function handleRoleAddCommand(message, args) {
     return;
   }
 
-  if (args.length < 2) {
-    await message.reply('Kullanım: `.roller-ekle @rol :emoji:`\nÖrnek: `.roller-ekle @Moderator 🛡️`');
+  if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+    await message.reply('❌ Bu komut için Rolleri Yönet izni gerekir.');
     return;
   }
 
   const roleMatch = message.mentions.roles.first();
   if (!roleMatch) {
-    await message.reply('Geçerli bir rol etiketle.');
+    await message.reply('Kullanım: .roller-ekle @rol kategori\nÖrnek: .roller-ekle @Oyuncu oyun');
     return;
   }
 
-  const emoji = args[args.length - 1];
-  if (!emoji) {
-    await message.reply('Emoji belirt.');
+  if (!roleMatch.editable) {
+    await message.reply('❌ Bu rol botun en yüksek rolünün altında değil.');
     return;
   }
+
+  const values = args.slice(1);
+  const categoryToken = values.find((value) =>
+    Object.prototype.hasOwnProperty.call(ROLE_GROUP_ALIASES, String(value).trim().toLocaleLowerCase('tr-TR'))
+  );
+  const emojiToken = values.find((value) => Object.values(ROLE_GROUP_EMOJIS).includes(value));
+  const group = categoryToken ? normalizeRoleGroup(categoryToken) : (emojiToken
+    ? Object.entries(ROLE_GROUP_EMOJIS).find(([, emoji]) => emoji === emojiToken)?.[0] || 'general'
+    : 'general');
+  const emoji = ROLE_GROUP_EMOJIS[group] || '🎭';
 
   try {
-    addRoleToMenu(message.guild.id, roleMatch.id, emoji);
+    addRoleToMenu(message.guild.id, roleMatch.id, emoji, group);
+    const menuReady = await ensureRoleMenu(message.guild);
     const embed = new EmbedBuilder()
       .setTitle('✅ Rol Eklendi')
-      .setDescription(`${emoji} ${roleMatch.name} rol menüsüne eklendi.`)
+      .setDescription(emoji + ' ' + roleMatch.name + ' rol menüsünde **' + group + '** kategorisine eklendi.' + (menuReady ? '' : '\n\n⚠️ Menü mesajı yenilenemedi; konsol logunu kontrol et.'))
       .setColor(Colors.Green);
     await message.reply({ embeds: [embed] });
   } catch (error) {
@@ -1072,10 +1403,14 @@ async function handleRoleAddCommand(message, args) {
     await message.reply('❌ Rol eklenirken hata oluştu.');
   }
 }
-
 async function handleRoleRemoveCommand(message, args) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!message.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles)) {
+    await message.reply('❌ Bu komut için Rolleri Yönet izni gerekir.');
     return;
   }
 
@@ -1087,9 +1422,10 @@ async function handleRoleRemoveCommand(message, args) {
 
   try {
     removeRoleFromMenu(message.guild.id, roleMatch.id);
+    await ensureRoleMenu(message.guild);
     const embed = new EmbedBuilder()
       .setTitle('✅ Rol Silindi')
-      .setDescription(`${roleMatch.name} rol menüsünden silindi.`)
+      .setDescription(roleMatch.name + ' rol menüsünden silindi.')
       .setColor(Colors.Green);
     await message.reply({ embeds: [embed] });
   } catch (error) {
@@ -1097,14 +1433,18 @@ async function handleRoleRemoveCommand(message, args) {
     await message.reply('❌ Rol silinirken hata oluştu.');
   }
 }
-
 async function handleRoleMenuCommand(message) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
     return;
   }
 
-  await ensureRoleMenu(message.guild);
+  const menuReady = await ensureRoleMenu(message.guild);
+  if (!menuReady) {
+    await message.reply('❌ Rol menüsü oluşturulamadı. Botta Kanal Yönet ve Mesaj Gönder izinlerini kontrol et.');
+    return;
+  }
+
   const embed = new EmbedBuilder()
     .setTitle('✅ Rol Menüsü Hazırlandı')
     .setDescription('Rol seçim menüsü `rol-menusu` kanalında oluşturuldu.')
@@ -1119,10 +1459,17 @@ async function handleRoleCommand(message) {
     return;
   }
 
-  const embed = buildStaticRoleMenuEmbed(message.guild.id);
-  const components = buildRoleMenuComponents(message.guild.id);
+  const menuReady = await ensureRoleMenu(message.guild);
+  if (!menuReady) {
+    await message.reply('❌ Rol menüsü oluşturulamadı. Botta Kanal Yönet ve Mesaj Gönder izinlerini kontrol et.');
+    return;
+  }
 
-  await message.reply({ embeds: [embed], components });
+  await message.reply(buildRoleMenuPayload(message.guild.id));
+  const extraPayload = buildRoleMenuExtraPayload(message.guild.id);
+  if (extraPayload) {
+    await message.channel.send(extraPayload);
+  }
 }
 
 async function handleHelpCommand(message) {
@@ -1149,6 +1496,7 @@ client.on(Events.ClientReady, async () => {
         }
       }
       await ensureRoomMenu(guild);
+      await ensureRoleMenu(guild);
     } catch (error) {
       console.error(`[${guild.name}] başlangıç ayarı tamamlanamadı:`, error.message);
     }
@@ -1180,7 +1528,32 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
-  if (command === 'roller-ekle') {
+  if (command === 'boost-kanal') {
+    await handleBoostChannelCommand(message);
+    return;
+  }
+
+  if (command === 'boost-gif') {
+    await handleBoostGifCommand(message, args);
+    return;
+  }
+
+  if (command === 'boost-test') {
+    await handleBoostTestCommand(message);
+    return;
+  }
+
+  if (command === 'boost-baslik') {
+    await handleBoostTitleCommand(message, args);
+    return;
+  }
+
+  if (command === 'boost-mesaj') {
+    await handleBoostMessageCommand(message, args);
+    return;
+  }
+
+  if (command === 'roller-ekle' || command === 'rol-ekle') {
     await handleRoleAddCommand(message, args);
     return;
   }
@@ -1212,7 +1585,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    // Rol menüsü admin butonları
+
+    // Eski menü mesajlarıyla uyumluluk için admin butonları
     if (interaction.customId === 'role-menu-add') {
       // Rol ekle butonu - admin modal aç
       if (!interaction.member.permissions.has('ManageRoles')) {
@@ -1294,6 +1668,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      const botMember = interaction.guild.members.me;
+      if (!botMember?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        await interaction.reply({ content: '❌ Botta Rolleri Yönet izni yok.', ephemeral: true });
+        return;
+      }
+
+      if (!role.editable) {
+        await interaction.reply({ content: '❌ Bu rol botun en yüksek rolünün altında değil; rol hiyerarşisini kontrol et.', ephemeral: true });
+        return;
+      }
+
       try {
         if (member.roles.cache.has(roleId)) {
           await member.roles.remove(roleId);
@@ -1304,7 +1689,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       } catch (error) {
         console.error('Rol toggle hatası:', error);
-        await interaction.reply({ content: '❌ Rol değiştirilirken hata oluştu.', ephemeral: true });
+        const content = error?.code === 50013
+          ? '❌ Botun bu rolü yönetme yetkisi yok. Bot rolünü hedef rolün üstüne taşı.'
+          : '❌ Rol değiştirilirken hata oluştu.';
+        await interaction.reply({ content, ephemeral: true });
       }
       return;
     }
@@ -1393,6 +1781,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (interaction.isStringSelectMenu()) {
+    if (interaction.customId.startsWith('role-select:')) {
+      await handleRoleSelect(interaction);
+    }
+    return;
+  }
+
   if (interaction.isModalSubmit()) {
     if (interaction.customId === 'room-create-modal') {
       await handleRoomCreateModal(interaction);
@@ -1403,8 +1798,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const roleInput = interaction.fields.getTextInputValue('role-id-input').trim();
       const emoji = interaction.fields.getTextInputValue('emoji-input').trim();
 
-      const roleMatch = interaction.message?.mentions?.roles?.first() || 
-                        interaction.guild.roles.cache.find(r => r.name === roleInput || r.id === roleInput) ||
+      const roleId = roleInput.match(/^<@&(\d+)>$/)?.[1] || roleInput;
+
+      const roleMatch = interaction.guild.roles.cache.get(roleId) ||
+                        interaction.guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase()) ||
                         interaction.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleInput.toLowerCase()));
 
       if (!roleMatch) {
@@ -1432,7 +1829,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.customId === 'role-remove-modal') {
       const roleInput = interaction.fields.getTextInputValue('role-id-input').trim();
 
-      const roleMatch = interaction.guild.roles.cache.find(r => r.name === roleInput || r.id === roleInput) ||
+      const roleId = roleInput.match(/^<@&(\d+)>$/)?.[1] || roleInput;
+
+      const roleMatch = interaction.guild.roles.cache.get(roleId) ||
+                        interaction.guild.roles.cache.find(r => r.name.toLowerCase() === roleInput.toLowerCase()) ||
                         interaction.guild.roles.cache.find(r => r.name.toLowerCase().includes(roleInput.toLowerCase()));
 
       if (!roleMatch) {
@@ -1558,6 +1958,12 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
     await sendLog(newMember.guild.id, 'moderation', embed);
   }
+
+  const startedBoosting = !oldMember.premiumSinceTimestamp && Boolean(newMember.premiumSinceTimestamp);
+  if (startedBoosting) {
+    await sendLog(newMember.guild.id, 'boost', buildBoostNotificationEmbed(newMember));
+  }
+
 
   if (!oldMember.roles.cache.equals(newMember.roles.cache)) {
     const added = newMember.roles.cache.filter((role) => !oldMember.roles.cache.has(role.id)).map((role) => role.name);
@@ -2034,6 +2440,19 @@ client.on('shardReconnecting', (shardId) => {
 
 client.on('invalidated', () => {
   console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
+});
+
+require('./v2').initializeV2({
+  client,
+  rest,
+  sendLog,
+  commandHandlers: {
+    setup: handleSetupCommand,
+    log: handleLogCommand,
+    oda: handleRoomCommand,
+    roller: handleRoleCommand,
+    help: handleHelpCommand,
+  },
 });
 
 client.login(discordToken).catch((error) => {
