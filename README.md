@@ -275,6 +275,12 @@ Seviye sistemi varsayılan olarak kapalıdır. Yönetici şu komutla açabilir:
 - `.seviye ödül 5 @Rol` 5. seviyeye ulaşana rol verir.
 - `.seviye ödül-sil 5` seviye ödülünü kaldırır.
 - Veriler sunucu bazında V2 JSON dosyasında saklanır.
+- .leaderboard kur #kanal sabit leaderboard panelini oluşturur.
+- .leaderboard yenile paneli anında günceller.
+- .leaderboard kapat otomatik güncellemeyi durdurur.
+- Panel XP, seviye, mesaj, ses dakikası ve davet istatistiklerini gösterir.
+- Panel her 60 saniyede bir otomatik yenilenir.
+- /leaderboard-panel ile panel yönetilebilir.
 
 ### Yardım
 
