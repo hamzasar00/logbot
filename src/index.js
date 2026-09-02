@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, ChannelType, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, REST, Routes, ChannelSelectMenuBuilder, UserSelectMenuBuilder, StringSelectMenuBuilder, AuditLogEvent, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { config } = require('dotenv');
 config();
+const { printBanner, printSuccess, printError } = require('./console-ui');
 
 const discordToken = process.env.DISCORD_TOKEN?.trim();
 if (!discordToken || discordToken === 'your_discord_bot_token_here') {
@@ -1511,7 +1512,7 @@ client.on(Events.ClientReady, async () => {
     status: 'online',
     activities: [{ name: 'Darth.vfx', type: 3 }],
   });
-  console.log(`Bot aktif: ${client.user.tag} | Sunucu sayısı: ${client.guilds.cache.size}`);
+  printBanner(client);
 
   for (const guild of client.guilds.cache.values()) {
     try {
@@ -1522,17 +1523,17 @@ client.on(Events.ClientReady, async () => {
         try {
           await ensureRoomControlChannel(guild, roomInfo);
         } catch (error) {
-          console.error('Oda yönetim sohbeti hazırlanamadı:', error.message);
+          printError('Oda yönetim sohbeti hazırlanamadı', error);
         }
       }
       await ensureRoomMenu(guild);
       await ensureRoleMenu(guild);
     } catch (error) {
-      console.error(`[${guild.name}] başlangıç ayarı tamamlanamadı:`, error.message);
+      printError(`[${guild.name}] başlangıç ayarı tamamlanamadı`, error);
     }
   }
 
-  console.log('Discord bağlantısı hazır. Prefix komutları kullanılabilir.');
+  printSuccess('Discord bağlantısı hazır • Prefix: . • Yardım: .help');
 });
 
 client.on(Events.MessageCreate, async (message) => {
