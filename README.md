@@ -1,4 +1,4 @@
-# Discord Log Bot — Kuvars Kaizen UYG
+# Discord Log Bot
 
 Discord sunucuları için Türkçe çalışan, otomatik log, boost bildirimi, rol seçim menüsü ve özel ses odası botu.
 
