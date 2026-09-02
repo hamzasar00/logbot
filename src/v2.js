@@ -286,6 +286,27 @@ async function welcomeCommand(context) {
 
 
 
+async function ensureBlackjackChannel(guild) {
+  const config = getGuild(guild.id).blackjack;
+  let channel = config.channelId ? await guild.channels.fetch(config.channelId).catch(() => null) : null;
+  if (!channel || channel.type !== ChannelType.GuildText) {
+    channel = guild.channels.cache.find((candidate) => candidate.type === ChannelType.GuildText && candidate.name === 'blackjack') || null;
+  }
+  if (!channel) {
+    channel = await guild.channels.create({
+      name: 'blackjack',
+      type: ChannelType.GuildText,
+      topic: '🃏 Sunucu Blackjack odası — .blackjack ile oyun başlat.',
+      reason: 'Kalıcı Blackjack oyun odası oluşturuluyor',
+    }).catch((error) => {
+      console.error('Blackjack odası oluşturulamadı:', error.message);
+      return null;
+    });
+  }
+  if (channel && config.channelId !== channel.id) updateGuildSection(guild.id, 'blackjack', { channelId: channel.id });
+  return channel;
+}
+
 const BLACKJACK_SUITS = ['♠', '♥', '♦', '♣'];
 const BLACKJACK_RANKS = [
   { label: 'A', value: 11 },
@@ -368,6 +389,9 @@ async function finishBlackjack(interaction, game, resultText) {
 async function startBlackjackCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  const blackjackChannel = await ensureBlackjackChannel(guild);
+  if (!blackjackChannel) return respond(context, { content: '❌ Blackjack odası oluşturulamadı. Botun kanal oluşturma iznini kontrol et.', ephemeral: true });
+  if (context.channelId !== blackjackChannel.id) return respond(context, { content: '🃏 Blackjack oyununu ' + blackjackChannel + ' kanalında oynayabilirsin.', ephemeral: true });
   const user = isInteraction(context) ? context.user : context.author;
   const key = guild.id + ':' + user.id;
   if (blackjackGames.has(key)) return respond(context, { content: 'Zaten devam eden bir blackjack oyunun var.', ephemeral: true });
@@ -801,6 +825,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => console.error('V2 slash komutları kaydedilemedi:', error.message));
       await refreshLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli yenilenemedi:', error.message));
+      await ensureBlackjackChannel(guild);
     }
     console.log('V2/V3 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik, seviye ve slash komutları.');
   });
