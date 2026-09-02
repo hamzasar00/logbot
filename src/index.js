@@ -724,6 +724,8 @@ async function ensureRoleMenuInternal(guild) {
   };
 
   try {
+    // Cache boş olsa bile mevcut ROLLER kanalını bul; yeniden oluşturma.
+    await guild.channels.fetch().catch(() => null);
     let roleChannel = null;
 
     if (roleMenuInfo?.channelId) {
