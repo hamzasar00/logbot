@@ -35,6 +35,7 @@ function createGuildDefaults() {
       announcementChannelId: null,
       rewards: {},
       users: {},
+      leaderboard: { enabled: false, channelId: null, messageId: null },
     },
   };
 }
@@ -125,6 +126,12 @@ function normalizeGuild(value) {
   if (!Number.isInteger(guild.levels.xpPerMessage) || guild.levels.xpPerMessage < 1 || guild.levels.xpPerMessage > 100) guild.levels.xpPerMessage = defaults.levels.xpPerMessage;
   if (!Number.isInteger(guild.levels.cooldownSeconds) || guild.levels.cooldownSeconds < 5 || guild.levels.cooldownSeconds > 3600) guild.levels.cooldownSeconds = defaults.levels.cooldownSeconds;
   if (typeof guild.levels.announce !== 'boolean') guild.levels.announce = defaults.levels.announce;
+  if (!isPlainObject(guild.levels.leaderboard)) guild.levels.leaderboard = {};
+  guild.levels.leaderboard = mergeDefaults(guild.levels.leaderboard, defaults.levels.leaderboard);
+  if (typeof guild.levels.leaderboard.enabled !== 'boolean') guild.levels.leaderboard.enabled = defaults.levels.leaderboard.enabled;
+  for (const key of ['channelId', 'messageId']) {
+    if (guild.levels.leaderboard[key] !== null && typeof guild.levels.leaderboard[key] !== 'string') guild.levels.leaderboard[key] = null;
+  }
   if (!isPlainObject(guild.levels.rewards)) guild.levels.rewards = {};
   for (const [level, roleId] of Object.entries(guild.levels.rewards)) {
     if (!/^[1-9]\d{0,2}$/.test(level) || !/^\d{5,25}$/.test(String(roleId))) delete guild.levels.rewards[level];
