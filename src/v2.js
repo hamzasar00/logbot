@@ -434,7 +434,11 @@ async function handleBlackjackButton(interaction) {
   if (action === 'hit') {
     game.player.push(game.deck.pop());
     const score = blackjackScore(game.player);
-    if (score >= 21) return finishBlackjack(interaction, game, score === 21 ? '🃏 21 yaptın!' : '💥 Elin patladı. Kaybettin.');
+    if (score > 21) return finishBlackjack(interaction, game, '💥 Elin patladı. Kaybettin.');
+    if (score === 21) {
+      while (blackjackScore(game.dealer) < 17 && game.deck.length) game.dealer.push(game.deck.pop());
+      return finishBlackjack(interaction, game, blackjackResult(game));
+    }
     return interaction.update({ embeds: [blackjackEmbed(game)], components: [blackjackButtons(ownerId)] });
   }
   if (action === 'stand') {
