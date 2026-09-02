@@ -261,7 +261,7 @@ Desteklenen slash komutları sunucuya otomatik kaydedilebilir:
 ### Seviye ve ödül sistemi
 ### Blackjack
 
-Para veya bahis içermeyen sunucu içi mini oyun:
+Gerçek para içermeyen sanal çip sistemiyle sunucu içi mini oyun:
 
 ~~~text
 .blackjack
@@ -273,6 +273,11 @@ Para veya bahis içermeyen sunucu içi mini oyun:
 - Her kullanıcı aynı sunucuda aynı anda tek oyun açabilir.
 - Oyunlar 5 dakika işlem yapılmazsa otomatik kapanır.
 - Slash komutu: /blackjack
+- `.bj 100` veya `.blackjack 100` ile çip bahisli oyun başlatılır.
+- Kazanan normal elde 2x, doğal Blackjack'te 2.5x ödeme alır; beraberlikte bahis iade edilir.
+- `.bakiye` mevcut çip bakiyesini gösterir.
+- `.günlük` veya `.gunluk` 24 saatte bir günlük çip bonusu verir.
+- Oyun süresi dolarsa bahis otomatik olarak iade edilir.
 - Bot açılırken sunucu için #blackjack odası otomatik hazırlanır.
 - Odanın kanal ID'si ayarlarda saklanır; bot yeniden başlatılınca yeni oda açılmaz.
 - Oyun komutları yalnızca bu odada çalışır.
