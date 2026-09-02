@@ -2473,7 +2473,7 @@ client.on('invalidated', () => {
   console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
 });
 
-require('./v2').initializeV2({
+require('./v2').initializeV3({
   client,
   rest,
   sendLog,
