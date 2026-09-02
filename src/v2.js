@@ -13,12 +13,20 @@ const {
   recordStat,
   getStats,
   getLeaderboard,
+  getLevelConfig,
+  addLevelXp,
+  getLevelUser,
+  getLevelLeaderboard,
+  setLevelReward,
+  removeLevelReward,
+  xpForLevel,
   saveState,
 } = require('./v2-db');
 
 const spamBuckets = new Map();
 const voiceStarted = new Map();
 const inviteSnapshots = new Map();
+const levelCooldowns = new Map();
 
 function isInteraction(context) {
   return typeof context.isChatInputCommand === 'function' && context.isChatInputCommand();
@@ -271,6 +279,97 @@ async function welcomeCommand(context) {
   return respond(context, { content: '✅ Hoş geldin ayarları güncellendi.', ephemeral: true });
 }
 
+
+async function levelCommand(context) {
+  const guild = guildOf(context);
+  if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  const args = isInteraction(context) ? [] : argsOf(context);
+  const action = isInteraction(context) ? 'profil' : (args[0] || 'profil').toLocaleLowerCase('tr-TR');
+  const config = getLevelConfig(guild.id);
+  if (['ac', 'aç', 'kapat', 'ayar', 'ödül', 'odul', 'ödül-sil', 'odul-sil'].includes(action)) {
+    if (!isManager(context.member)) return respond(context, { content: 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+    if (action === 'ac' || action === 'aç' || action === 'kapat') {
+      updateGuildSection(guild.id, 'levels', { enabled: action !== 'kapat' });
+      return respond(context, { content: '✅ Seviye sistemi ' + (action === 'kapat' ? 'kapatıldı.' : 'açıldı.'), ephemeral: true });
+    }
+    if (action === 'ayar') {
+      const setting = args[1]?.toLocaleLowerCase('tr-TR');
+      const value = Number(args[2]);
+      if (setting === 'xp' && Number.isInteger(value) && value >= 1 && value <= 100) {
+        updateGuildSection(guild.id, 'levels', { xpPerMessage: value });
+        return respond(context, { content: '✅ Mesaj başına XP ' + value + ' olarak ayarlandı.', ephemeral: true });
+      }
+      if (setting === 'cooldown' && Number.isInteger(value) && value >= 5 && value <= 3600) {
+        updateGuildSection(guild.id, 'levels', { cooldownSeconds: value });
+        return respond(context, { content: '✅ XP cooldown süresi ' + value + ' saniye olarak ayarlandı.', ephemeral: true });
+      }
+      if (setting === 'duyuru') {
+        const channel = channelOf(context);
+        updateGuildSection(guild.id, 'levels', { announcementChannelId: channel?.id || null, announce: Boolean(channel) });
+        return respond(context, { content: channel ? '✅ Seviye duyuruları ' + channel + ' kanalına ayarlandı.' : '✅ Seviye duyuruları kapatıldı.', ephemeral: true });
+      }
+      return respond(context, { content: 'Kullanım: .seviye ayar xp 15, .seviye ayar cooldown 60 veya .seviye ayar duyuru #kanal.', ephemeral: true });
+    }
+    const level = Number(args[1]);
+    if (action === 'ödül' || action === 'odul') {
+      const role = roleOf(context);
+      if (!Number.isInteger(level) || !role || !setLevelReward(guild.id, level, role.id)) return respond(context, { content: 'Kullanım: .seviye ödül 5 @Rol.', ephemeral: true });
+      return respond(context, { content: '✅ Seviye ' + level + ' ödülü ' + role + ' olarak ayarlandı.', ephemeral: true });
+    }
+    if (Number.isInteger(level) && removeLevelReward(guild.id, level)) return respond(context, { content: '✅ Seviye ' + level + ' ödülü kaldırıldı.', ephemeral: true });
+    return respond(context, { content: 'Kullanım: .seviye ödül-sil 5.', ephemeral: true });
+  }
+  if (action === 'sıralama' || action === 'siralama' || action === 'leaderboard') return levelLeaderboardCommand(context);
+  const target = isInteraction(context) ? (context.options.getUser('user') || context.user) : (targetOf(context) || context.author);
+  if (!config.enabled && !isManager(context.member)) return respond(context, { content: 'Seviye sistemi kapalı. Yönetici .seviye ac komutuyla açabilir.', ephemeral: true });
+  const user = getLevelUser(guild.id, target.id);
+  const nextXp = xpForLevel(user.level + 1);
+  const member = await memberOf(guild, target.id);
+  const displayName = member?.displayName || target.username || 'Kullanıcı';
+  return respond(context, { embeds: [new EmbedBuilder().setTitle('🎖️ ' + displayName + ' seviye profili').setThumbnail(target.displayAvatarURL?.({ size: 128 }) || null).setColor(0x8B5CF6).addFields(
+    { name: 'Seviye', value: String(user.level), inline: true },
+    { name: 'XP', value: user.xp + ' / ' + nextXp, inline: true },
+    { name: 'Mesaj', value: String(user.messages), inline: true },
+    { name: 'Sonraki seviye', value: Math.max(0, nextXp - user.xp) + ' XP kaldı.' }
+  )] });
+}
+
+async function levelLeaderboardCommand(context) {
+  const guild = guildOf(context);
+  if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  const config = getLevelConfig(guild.id);
+  if (!config.enabled && !isManager(context.member)) return respond(context, { content: 'Seviye sistemi kapalı. Yönetici .seviye ac komutuyla açabilir.', ephemeral: true });
+  const requestedLimit = isInteraction(context) ? context.options.getInteger('limit') || 10 : Number(argsOf(context)[1]) || 10;
+  const rows = getLevelLeaderboard(guild.id, Math.min(10, Math.max(1, requestedLimit)));
+  if (!rows.length) return respond(context, { content: 'Henüz seviye verisi yok.', ephemeral: true });
+  const lines = rows.map((row, index) => '**' + (index + 1) + '.** <@' + row.userId + '> — Seviye ' + row.level + ' · ' + row.xp + ' XP');
+  return respond(context, { embeds: [new EmbedBuilder().setTitle('🏆 Seviye sıralaması').setDescription(lines.join('\n')).setColor(0xF59E0B)] });
+}
+
+async function awardLevelXp(message) {
+  const config = getLevelConfig(message.guild.id);
+  if (!config.enabled) return;
+  const key = message.guild.id + ':' + message.author.id;
+  const now = Date.now();
+  const last = levelCooldowns.get(key) || 0;
+  if (now - last < config.cooldownSeconds * 1000) return;
+  levelCooldowns.set(key, now);
+  const result = addLevelXp(message.guild.id, message.author.id, config.xpPerMessage);
+  if (!result?.leveledUp) return;
+  const rewardRoleId = config.rewards[String(result.level)];
+  let rewardText = '';
+  if (rewardRoleId && message.member) {
+    const role = message.guild.roles.cache.get(rewardRoleId);
+    if (role && !role.managed) {
+      await message.member.roles.add(role).catch(() => {});
+      rewardText = ' Ödül rolü: ' + role + '.';
+    }
+  }
+  if (!config.announce) return;
+  const channel = config.announcementChannelId ? await textChannel(message.guild, config.announcementChannelId) : message.channel;
+  if (channel) await channel.send({ content: '🎉 <@' + message.author.id + '> seviye atladı! Yeni seviye: ' + result.level + '.' + rewardText }).catch(() => {});
+}
+
 async function statsCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
@@ -403,6 +502,8 @@ const slashCommands = [
   { name: 'hosgeldin', description: 'Hoş geldin ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'ayril', value: 'ayril' }, { name: 'ayril-kapat', value: 'ayril-kapat' }, { name: 'rol', value: 'rol' }, { name: 'rol-kapat', value: 'rol-kapat' }] }, { name: 'kanal', description: 'Metin kanalı', type: 7, channel_types: [0] }, { name: 'rol', description: 'Otomatik rol', type: 8 }, { name: 'mesaj', description: 'Şablon mesaj', type: 3 }] },
   { name: 'istatistik', description: 'Sunucu istatistikleri', options: [{ name: 'eylem', description: 'İşlem', type: 3, choices: [{ name: 'rapor', value: 'rapor' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }] }, { name: 'gun', description: 'Gün sayısı', type: 4, min_value: 1, max_value: 30 }] },
   { name: 'leaderboard', description: 'Metin, ses ve davet sıralaması', options: [{ name: 'kategori', description: 'Sıralama türü', type: 3, required: true, choices: [{ name: 'metin', value: 'metin' }, { name: 'ses', value: 'ses' }, { name: 'davet', value: 'davet' }] }, { name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
+  { name: 'seviye', description: 'Seviye profilini gösterir', options: [{ name: 'user', description: 'Profiline bakılacak kullanıcı', type: 6 }] },
+  { name: 'seviye-siralama', description: 'Seviye sıralamasını gösterir', options: [{ name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
   { name: 'oda-devret', description: 'Özel oda sahipliğini devreder', options: [{ name: 'user', description: 'Yeni sahip', type: 6, required: true }] },
   { name: 'oda-kilitle', description: 'Özel odayı kilitler veya açar' },
   { name: 'oda-limit', description: 'Özel oda limitini değiştirir', options: [{ name: 'limit', description: '0 sınırsızdır', type: 4, required: true, min_value: 0, max_value: 99 }] },
@@ -424,12 +525,15 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (command === 'hosgeldin' || command === 'hoşgeldin') return runV2Command(() => welcomeCommand(context), context, command);
       if (command === 'istatistik') return runV2Command(() => statsCommand(context), context, command);
       if (['leaderboard', 'leaderbord', 'liderlik', 'liderboard'].includes(command)) return runV2Command(() => leaderboardCommand(context), context, command);
+      if (command === 'seviye' || command === 'level') return runV2Command(() => levelCommand(context), context, command);
+      if (['seviye-siralama', 'levelboard'].includes(command)) return runV2Command(() => levelLeaderboardCommand(context), context, command);
       if (command === 'oda-devret') return runV2Command(() => roomCommand(context, 'devret'), context, command);
       if (command === 'oda-kilitle') return runV2Command(() => roomCommand(context, 'kilitle'), context, command);
       if (command === 'oda-limit') return runV2Command(() => roomCommand(context, 'limit'), context, command);
     }
     recordStat(message.guild.id, 'messages', 1, message.author.id);
       await applyModeration(message, sendLog).catch((error) => console.error('V2 moderasyon hatası:', error.message));
+      await awardLevelXp(message).catch((error) => console.error('V3 seviye XP hatası:', error.message));
     } catch (error) {
       console.error('V2 mesaj handler hatası:', error);
     }
@@ -447,6 +551,8 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'hosgeldin') return await welcomeCommand(interaction);
       if (name === 'istatistik') return await statsCommand(interaction);
       if (name === 'leaderboard') return await leaderboardCommand(interaction);
+      if (name === 'seviye') return await levelCommand(interaction);
+      if (name === 'seviye-siralama') return await levelLeaderboardCommand(interaction);
       if (name === 'oda-devret') return await roomCommand(interaction, 'devret');
       if (name === 'oda-kilitle') return await roomCommand(interaction, 'kilitle');
       if (name === 'oda-limit') return await roomCommand(interaction, 'limit');
@@ -506,7 +612,7 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => console.error('V2 slash komutları kaydedilemedi:', error.message));
     }
-    console.log('V2 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik ve slash komutları.');
+    console.log('V2/V3 özellikleri hazır: moderasyon, hoş geldin, özel oda 2.0, istatistik, seviye ve slash komutları.');
   });
 
   setInterval(() => {
