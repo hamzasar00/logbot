@@ -259,6 +259,21 @@ Desteklenen slash komutları sunucuya otomatik kaydedilebilir:
 - /oda-limit
 
 ### Seviye ve ödül sistemi
+### Blackjack
+
+Para veya bahis içermeyen sunucu içi mini oyun:
+
+~~~text
+.blackjack
+.bj
+~~~
+
+- Kart çek veya dur butonlarıyla oynanır.
+- Dağıtıcı 17 veya üstünde durur.
+- Her kullanıcı aynı sunucuda aynı anda tek oyun açabilir.
+- Oyunlar 5 dakika işlem yapılmazsa otomatik kapanır.
+- Slash komutu: /blackjack
+
 
 Seviye sistemi varsayılan olarak kapalıdır. Yönetici şu komutla açabilir:
 
