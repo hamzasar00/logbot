@@ -38,6 +38,7 @@ function createGuildDefaults() {
       leaderboard: { enabled: false, channelId: null, messageId: null },
     },
     blackjack: { channelId: null },
+    economy: { currencyName: 'çip', startingBalance: 1000, dailyReward: 500, users: {} },
   };
 }
 
@@ -140,6 +141,18 @@ function normalizeGuild(value) {
   if (!isPlainObject(guild.blackjack)) guild.blackjack = {};
   guild.blackjack = mergeDefaults(guild.blackjack, defaults.blackjack);
   if (guild.blackjack.channelId !== null && typeof guild.blackjack.channelId !== 'string') guild.blackjack.channelId = null;
+
+  if (!isPlainObject(guild.economy)) guild.economy = {};
+  guild.economy = mergeDefaults(guild.economy, defaults.economy);
+  if (typeof guild.economy.currencyName !== 'string' || !guild.economy.currencyName.trim()) guild.economy.currencyName = defaults.economy.currencyName;
+  if (!Number.isInteger(guild.economy.startingBalance) || guild.economy.startingBalance < 0 || guild.economy.startingBalance > 1000000000) guild.economy.startingBalance = defaults.economy.startingBalance;
+  if (!Number.isInteger(guild.economy.dailyReward) || guild.economy.dailyReward < 0 || guild.economy.dailyReward > 1000000000) guild.economy.dailyReward = defaults.economy.dailyReward;
+  if (!isPlainObject(guild.economy.users)) guild.economy.users = {};
+  for (const [userId, value] of Object.entries(guild.economy.users)) {
+    if (!isPlainObject(value)) { delete guild.economy.users[userId]; continue; }
+    if (!Number.isInteger(value.balance) || value.balance < 0) value.balance = 0;
+    if (!Number.isFinite(value.dailyAt) || value.dailyAt < 0) value.dailyAt = 0;
+  }
 
   if (!isPlainObject(guild.levels.users)) guild.levels.users = {};
   for (const [userId, value] of Object.entries(guild.levels.users)) {
@@ -320,7 +333,45 @@ function removeLevelReward(guildId, level) {
   return existed;
 }
 
+function getEconomy(guildId) {
+  return getGuild(guildId).economy;
+}
+
+function getBalance(guildId, userId) {
+  const economy = getEconomy(guildId);
+  if (!isPlainObject(economy.users[userId])) {
+    economy.users[userId] = { balance: economy.startingBalance, dailyAt: 0 };
+    saveState();
+  }
+  return Math.max(0, economy.users[userId].balance);
+}
+
+function changeBalance(guildId, userId, amount) {
+  const economy = getEconomy(guildId);
+  const current = getBalance(guildId, userId);
+  const delta = Math.trunc(Number(amount) || 0);
+  if (delta < 0 && current < Math.abs(delta)) return null;
+  economy.users[userId].balance = current + delta;
+  saveState();
+  return economy.users[userId].balance;
+}
+
+function claimDaily(guildId, userId) {
+  const economy = getEconomy(guildId);
+  getBalance(guildId, userId);
+  const user = economy.users[userId];
+  const now = Date.now();
+  const cooldown = 24 * 60 * 60 * 1000;
+  if (user.dailyAt && now - user.dailyAt < cooldown) {
+    return { claimed: false, balance: user.balance, retryAfter: cooldown - (now - user.dailyAt) };
+  }
+  user.dailyAt = now;
+  user.balance += economy.dailyReward;
+  saveState();
+  return { claimed: true, amount: economy.dailyReward, balance: user.balance, retryAfter: cooldown };
+}
+
 loadState();
 saveState();
 
-module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, getLevelConfig, addLevelXp, getLevelUser, getLevelLeaderboard, setLevelReward, removeLevelReward, xpForLevel, saveState };
+module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, getLevelConfig, addLevelXp, getLevelUser, getLevelLeaderboard, setLevelReward, removeLevelReward, xpForLevel, getEconomy, getBalance, changeBalance, claimDaily, saveState };
