@@ -258,6 +258,24 @@ Desteklenen slash komutları sunucuya otomatik kaydedilebilir:
 - /oda-kilitle
 - /oda-limit
 
+### Seviye ve ödül sistemi
+
+Seviye sistemi varsayılan olarak kapalıdır. Yönetici şu komutla açabilir:
+
+~~~text
+.seviye ac
+~~~
+
+- Mesajlardan cooldown kontrollü XP kazanılır.
+- `.seviye` veya /seviye kullanıcı profilini gösterir.
+- `.seviye sıralama` veya /seviye-siralama XP sıralamasını gösterir.
+- `.seviye ayar xp 15` mesaj başına XP miktarını ayarlar.
+- `.seviye ayar cooldown 60` XP kazanma aralığını saniye cinsinden ayarlar.
+- `.seviye ayar duyuru #kanal` seviye atlama duyurularını belirli kanala gönderir.
+- `.seviye ödül 5 @Rol` 5. seviyeye ulaşana rol verir.
+- `.seviye ödül-sil 5` seviye ödülünü kaldırır.
+- Veriler sunucu bazında V2 JSON dosyasında saklanır.
+
 ### Yardım
 
 Aşağıdaki komutların hepsi yardım menüsünü açar:
