@@ -276,6 +276,7 @@ Para veya bahis içermeyen sunucu içi mini oyun:
 - Bot açılırken sunucu için #blackjack odası otomatik hazırlanır.
 - Odanın kanal ID'si ayarlarda saklanır; bot yeniden başlatılınca yeni oda açılmaz.
 - Oyun komutları yalnızca bu odada çalışır.
+- Görsel masa görünümü, skor ilerleme çubuğu ve oyun bitince Yeni oyun butonu bulunur.
 
 
 Seviye sistemi varsayılan olarak kapalıdır. Yönetici şu komutla açabilir:
