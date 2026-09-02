@@ -504,28 +504,6 @@ const ROLE_MENU_PLACEHOLDERS = Object.freeze({
   general: '🎭 | Diğer Rolleri Seçin...',
 });
 
-function buildRoleMenuContent() {
-  return [
-    '📣 Sunucuda etiket atıp rahatsızlık vermemek için @everyone ve @here kullanmayınız.',
-    'o yüzden çekiliş ve etkinlik katılımcısı rollerinizi almayı unutmayın.',
-    '',
-    '• Etkinlik Katılımcısı: Sunucuda düzenlenen tüm etkinliklere katılmak için.',
-    '• Çekiliş Katılımcısı: Sunucuda düzenlenen tüm çekilişlere katılmak için.',
-    '',
-    '> **Not:** Renk rollerini alabilmek için "Booster veya Family" rolleri gerekmektedir.',
-  ].join('\n');
-}
-
-const ROLE_MENU_PLACEHOLDERS = Object.freeze({
-  event: '🎉 | Etkinlik Rolleri Seçin',
-  color: '🎨 | Renk Rolleri Seçin...',
-  zodiac: '⭐ | Burç Rolleri Seçin...',
-  game: '🎮 | Oyun Rolleri Seçin',
-  team: '⚽ | Takım Rolleri Seçin...',
-  relationship: '💍 | İlişki Rolleri Seçin...',
-  general: '🎭 | Diğer Rolleri Seçin...',
-});
-
 function getRoleMenuGroups(guildId) {
   const groups = [...ROLE_MENU_GROUPS];
   if (getMenuRoles(guildId).some((role) => role.group === 'general')) {
