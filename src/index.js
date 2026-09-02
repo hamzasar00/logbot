@@ -1256,6 +1256,10 @@ async function handleRoleCommand(message) {
   }
 
   await message.reply(buildRoleMenuPayload(message.guild.id));
+  const extraPayload = buildRoleMenuExtraPayload(message.guild.id);
+  if (extraPayload) {
+    await message.channel.send(extraPayload);
+  }
 }
 
 async function handleHelpCommand(message) {
