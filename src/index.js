@@ -723,8 +723,16 @@ async function ensureRoleMenuInternal(guild) {
     }
   };
 
+  const moveChannelOutOfCategory = async (channel) => {
+    if (channel?.parentId) {
+      await channel.setParent(null, { lockPermissions: false }).catch((error) => {
+        console.error('Rol menüsü kanalı kategori dışına taşınamadı:', error.message);
+      });
+    }
+  };
+
   try {
-    // Cache boş olsa bile mevcut ROLLER kanalını bul; yeniden oluşturma.
+    // Sadece rol-menusu kanalı kullanılır; ROLLER kategorisi oluşturulmaz.
     await guild.channels.fetch().catch(() => null);
     let roleChannel = null;
 
@@ -732,6 +740,7 @@ async function ensureRoleMenuInternal(guild) {
       const savedChannel = await guild.channels.fetch(roleMenuInfo.channelId).catch(() => null);
       if (savedChannel?.type === ChannelType.GuildText) {
         roleChannel = savedChannel;
+        await moveChannelOutOfCategory(roleChannel);
         const message = await roleChannel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
         if (message) {
           await message.edit(buildRoleMenuPayload(guild.id));
@@ -742,31 +751,9 @@ async function ensureRoleMenuInternal(guild) {
       }
     }
 
-    const savedRoleCategoryId = getCategoryId(guild.id, 'role');
-    const savedRoleCategory = savedRoleCategoryId
-      ? await guild.channels.fetch(savedRoleCategoryId).catch(() => null)
-      : null;
-    let roleCategory = savedRoleCategory?.type === ChannelType.GuildCategory
-      ? savedRoleCategory
-      : guild.channels.cache.find((channel) =>
-        channel.type === ChannelType.GuildCategory && channel.name === 'ROLLER'
-      );
-
-    if (!roleCategory) {
-      roleCategory = await guild.channels.create({
-        name: 'ROLLER',
-        type: ChannelType.GuildCategory,
-        reason: 'Rol menüsü için kategori oluşturuluyor.',
-      });
-    }
-
-    saveCategoryId(guild.id, 'role', roleCategory.id);
-
-    if (!roleChannel || roleChannel.parentId !== roleCategory.id) {
+    if (!roleChannel) {
       roleChannel = guild.channels.cache.find((channel) =>
-        channel.type === ChannelType.GuildText &&
-        channel.parentId === roleCategory.id &&
-        channel.name === 'rol-menusu'
+        channel.type === ChannelType.GuildText && channel.name === 'rol-menusu'
       );
     }
 
@@ -774,9 +761,10 @@ async function ensureRoleMenuInternal(guild) {
       roleChannel = await guild.channels.create({
         name: 'rol-menusu',
         type: ChannelType.GuildText,
-        parent: roleCategory.id,
-        reason: 'Rol seçim menüsü oluşturuluyor.',
+        reason: 'Kategori olmadan rol seçim menüsü kanalı oluşturuluyor.',
       });
+    } else {
+      await moveChannelOutOfCategory(roleChannel);
     }
 
     const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
