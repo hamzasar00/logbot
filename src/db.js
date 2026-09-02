@@ -14,6 +14,7 @@ const LOG_GROUPS = Object.freeze({
   voice: { key: 'voice', label: 'Ses Log', channelName: 'ses-log', defaultEnabled: true },
   moderation: { key: 'moderation', label: 'Moderasyon Log', channelName: 'moderasyon-log', defaultEnabled: true },
   guild: { key: 'guild', label: 'Sunucu Log', channelName: 'sunucu-log', defaultEnabled: true },
+  boost: { key: 'boost', label: 'Boost Log', channelName: 'boost-log', defaultEnabled: true },
 });
 
 function createEmptyState() {
@@ -26,6 +27,7 @@ function createEmptyState() {
     guild_roles: {},
     guild_role_groups: {},
     role_menu_storage: {},
+    boost_settings: {},
   };
 }
 
@@ -57,6 +59,16 @@ function loadState() {
 
 function saveState() {
   fs.writeFileSync(dataFile, JSON.stringify(state, null, 2), 'utf8');
+}
+
+function saveBoostSetting(guildId, key, value) {
+  if (!state.boost_settings[guildId]) state.boost_settings[guildId] = {};
+  state.boost_settings[guildId][key] = value;
+  saveState();
+}
+
+function getBoostSetting(guildId, key) {
+  return state.boost_settings[guildId]?.[key] ?? null;
 }
 
 function initDatabase() {
@@ -190,4 +202,6 @@ module.exports = {
   getRoleEmoji,
   saveRoleMenuMessage,
   getRoleMenuMessage,
+  saveBoostSetting,
+  getBoostSetting,
 };
