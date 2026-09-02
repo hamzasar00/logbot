@@ -541,86 +541,103 @@ async function handleLogCommand(message) {
 
 function buildHelpEmbed() {
   return new EmbedBuilder()
-    .setTitle('🆘 Yardım Menüsü')
-    .setDescription('Bu bot, sunucudaki log olaylarını otomatik olarak izler ve ayrı kanallara gönderir. Ayrıca rol ve ses odası yönetimi yapabilir.')
+    .setTitle('🆘 Kuvars Kaizen UYG | Detaylı Yardım')
+    .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Aşağıdaki komutlar nokta (.) prefixi ile kullanılır.')
     .setColor(Colors.Blurple)
     .addFields(
       {
-        name: '📋 LOG KOMUTLARı',
-        value: '** **',
+        name: '🚀 Hızlı Başlangıç',
+        value: '1. .setup yaz ve temel kanalları oluştur.\n2. .log ile log panelini aç.\n3. .boost-kanal #kanal ile boost kanalını seç.\n4. .roller ile rol menüsünü hazırla.',
         inline: false,
       },
       {
-        name: '.setup',
-        value: 'Sunucuda otomatik olarak LOGLAR kategorisini oluşturur. İçinde: `uye-log`, `mesaj-log`, `rol-log`, `kanal-log`, `ses-log`, `moderasyon-log`, `sunucu-log` kanalları hazır olur.',
+        name: '📋 .setup',
+        value: 'LOGLAR kategorisini ve uye-log, mesaj-log, rol-log, kanal-log, ses-log, moderasyon-log, sunucu-log ve boost-log kanallarını hazırlar. Oda ve rol menüsü altyapısını da kontrol eder.',
         inline: false,
       },
       {
-        name: '.log',
-        value: 'Log kontrol panelini açar. Her log türü için ayrı aç/kapat butonu ve kanal seçme menüsü bulunur. Her log tamamen bağımsız çalışır.',
+        name: '📊 .log',
+        value: 'Log kontrol panelini açar. Her log türünü ayrı ayrı açıp kapatabilir ve kanalını seçim menüsünden değiştirebilirsin. Log türleri: üye, mesaj, rol, kanal, ses, moderasyon, sunucu ve boost.',
         inline: false,
       },
       {
-        name: '🎧 SES ODASI KOMUTLARı',
-        value: '** **',
-        inline: false,
-      },
-      {
-        name: '.oda',
-        value: 'Özel oda oluşturma menüsünü ayrı kanalda gösterir. Üyelerin ses odası oluşturmak için kullandığı buton buradan açılır.',
-        inline: false,
-      },
-      {
-        name: '👥 ROL KOMUTLARı',
-        value: '** **',
+        name: '🎁 BOOST BİLDİRİMLERİ',
+        value: 'Boost geldiğinde seçtiğin kanala kırmızı kenarlı embed, boost yapan kişinin avatarı, başlık, mesaj ve GIF gönderilir.',
         inline: false,
       },
       {
         name: '.boost-kanal #kanal',
-        value: 'Boost bildirimlerinin gönderileceği kanalı ayarlar.',
+        value: 'Boost bildirimlerinin gönderileceği kanalı seçer. Örnek: .boost-kanal #boost\nGereken izin: Sunucuyu Yönet veya Kanalları Yönet.',
         inline: false,
       },
       {
-        name: '.boost-gif URL',
-        value: 'Boost mesajındaki GIF bağlantısını ayarlar. Kaldırmak için boost-gif kaldır kullanılır.',
+        name: '.boost-gif bağlantı',
+        value: 'Boost embedinde gösterilecek GIF bağlantısını kaydeder. Direkt GIF bağlantısı kullan veya GIF dosyasını mesaja ekle. Kaldırmak için: .boost-gif kaldır',
         inline: false,
       },
       {
         name: '.boost-baslik metin',
-        value: 'Boost embed başlığını ayarlar.',
+        value: 'Boost embed başlığını değiştirir. Örnek: .boost-baslik Thank You Buddy',
         inline: false,
       },
       {
         name: '.boost-mesaj metin',
-        value: 'Boost embed alt yazısını ayarlar; | işareti yeni satır oluşturur.',
+        value: 'Boost embed açıklamasını değiştirir. | işareti yeni satır oluşturur. Örnek: .boost-mesaj Welcome To Real CLR LEAK | LEAK Buddy',
+        inline: false,
+      },
+      {
+        name: '👥 ROL MENÜSÜ',
+        value: 'Üyeler menüdeki seçimlerden rol alabilir. Menü üzerinden rol kaldırma sistemi yoktur; seçim sadece rol verir.',
         inline: false,
       },
       {
         name: '.roller-ekle @rol kategori',
-        value: 'Rolü menüye ekler. Örnek: `.roller-ekle @Oyuncu oyun` (emoji otomatik eklenir).',
+        value: 'Rolü seçim menüsüne ekler. Emoji otomatik gelir. Kategoriler: etkinlik, renk, burç, oyun, takım. Örnek: .roller-ekle @Oyuncu oyun\nKısa kullanım: .rol-ekle @Oyuncu oyun',
         inline: false,
       },
       {
         name: '.roller',
-        value: 'Rol seçim menüsünü açar. Üyeler dropdown\'dan rol alırlar.',
+        value: 'Rol seçim menüsünü gönderir veya mevcut rol-menusu kanalını günceller. Üyeler dropdown üzerinden yalnızca rol alabilir.',
+        inline: false,
+      },
+      {
+        name: '.roller-menu',
+        value: 'Rol menüsü kanalını hazırlar ve yeniler. Menü kanalı kategori olmadan rol-menusu adıyla kullanılır.',
         inline: false,
       },
       {
         name: '.roller-sil @rol',
-        value: 'Rolü menüden kaldırır. Örnek: `.roller-sil @Oyuncu`',
+        value: 'Belirtilen rolü seçim menüsünden çıkarır. Rolün kendisini sunucudan silmez. Gereken izin: Rolleri Yönet.',
         inline: false,
       },
       {
-        name: '.yardım / .help',
-        value: 'Bu yardım menüsünü gösterir.',
+        name: '🎧 SES ODASI',
+        value: 'Özel ses odaları üyelerin kendi odalarını oluşturmasına izin verir. Oda sahibi ayrıldığında oda otomatik kapatılır.',
         inline: false,
       },
       {
-        name: '📌 Önemli Notlar',
-        value: '• Log kanalı değiştirildiğinde olaylar yeni kanala gönderilir.\n• Her log bağımsız olarak açılıp kapatılabilir.\n• Özel oda oluşturulduktan sonra sahibi ayrıldığında otomatik kapanır.\n• Rol menüsüne rol eklemek için admin yetkiniz olmalı.',
+        name: '.oda',
+        value: 'Oda oluşturma panelini hazırlar. Üye paneldeki butona basarak kendi özel ses odasını açabilir; oda sahibi kullanıcı seçme menüleriyle erişim verebilir veya kaldırabilir.',
         inline: false,
-      }
-    );
+      },
+      {
+        name: '🔐 YETKİLER',
+        value: 'Boost ayarları: Sunucuyu Yönet veya Kanalları Yönet.\nRol ekleme/silme: Rolleri Yönet.\nBot: Mesaj Gönder, Embedleri Kullan, Kanalları Yönet ve rol verecekse bot rolü hedef rollerin üstünde olmalı.',
+        inline: false,
+      },
+      {
+        name: '🧾 LOG DETAYLARI',
+        value: 'Üye: giriş, çıkış ve profil değişiklikleri. Mesaj: silme ve düzenleme. Rol: rol verme/alma. Kanal: oluşturma, silme ve düzenleme. Ses: giriş, çıkış ve taşıma. Moderasyon: timeout ve ban işlemleri. Sunucu: sunucu ayarları. Boost: yeni boost bildirimleri.',
+        inline: false,
+      },
+      {
+        name: 'ℹ️ KULLANIM NOTLARI',
+        value: 'Komutlar yalnızca sunucu içinde çalışır. Prefix: .\nYardım kısayolları: .help, .yardım, .yardim\nEski ilişki kategorisindeki roller Diğer kategorisine alınır. Ayarlar data/bot-data.json dosyasında saklanır.',
+        inline: false,
+      },
+    )
+    .setFooter({ text: 'Kuvars Kaizen UYG • Detaylı komut rehberi' })
+    .setTimestamp();
 }
 
 function buildRoomMenuEmbed() {
