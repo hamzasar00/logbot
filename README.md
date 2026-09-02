@@ -273,6 +273,9 @@ Para veya bahis içermeyen sunucu içi mini oyun:
 - Her kullanıcı aynı sunucuda aynı anda tek oyun açabilir.
 - Oyunlar 5 dakika işlem yapılmazsa otomatik kapanır.
 - Slash komutu: /blackjack
+- Bot açılırken sunucu için #blackjack odası otomatik hazırlanır.
+- Odanın kanal ID'si ayarlarda saklanır; bot yeniden başlatılınca yeni oda açılmaz.
+- Oyun komutları yalnızca bu odada çalışır.
 
 
 Seviye sistemi varsayılan olarak kapalıdır. Yönetici şu komutla açabilir:
