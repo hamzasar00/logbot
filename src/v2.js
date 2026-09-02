@@ -955,4 +955,4 @@ function initializeV2({ client, rest, sendLog, commandHandlers = {} }) {
   }, 60000);
 }
 
-module.exports = { initializeV3 };
+module.exports = { initializeV2 };
