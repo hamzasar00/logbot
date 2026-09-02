@@ -504,6 +504,96 @@ const ROLE_MENU_PLACEHOLDERS = Object.freeze({
   general: '🎭 | Diğer Rolleri Seçin...',
 });
 
+function buildRoleMenuContent() {
+  return [
+    '📣 Sunucuda etiket atıp rahatsızlık vermemek için @everyone ve @here kullanmayınız.',
+    'o yüzden çekiliş ve etkinlik katılımcısı rollerinizi almayı unutmayın.',
+    '',
+    '• Etkinlik Katılımcısı: Sunucuda düzenlenen tüm etkinliklere katılmak için.',
+    '• Çekiliş Katılımcısı: Sunucuda düzenlenen tüm çekilişlere katılmak için.',
+    '',
+    '> **Not:** Renk rollerini alabilmek için "Booster veya Family" rolleri gerekmektedir.',
+  ].join('\n');
+}
+
+const ROLE_MENU_PLACEHOLDERS = Object.freeze({
+  event: '🎉 | Etkinlik Rolleri Seçin',
+  color: '🎨 | Renk Rolleri Seçin...',
+  zodiac: '⭐ | Burç Rolleri Seçin...',
+  game: '🎮 | Oyun Rolleri Seçin',
+  team: '⚽ | Takım Rolleri Seçin...',
+  relationship: '💍 | İlişki Rolleri Seçin...',
+  general: '🎭 | Diğer Rolleri Seçin...',
+});
+
+function getRoleMenuGroups(guildId) {
+  const groups = [...ROLE_MENU_GROUPS];
+  if (getMenuRoles(guildId).some((role) => role.group === 'general')) {
+    groups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
+  }
+  return groups;
+}
+
+function buildRoleSelectRow(guildId, group) {
+  const roles = getGroupRoles(guildId, group.id);
+  const options = roles
+    .map(({ role_id }) => role_id)
+    .map((roleId) => client.guilds.cache.get(guildId)?.roles.cache.get(roleId))
+    .filter((role) => role && !role.managed)
+    .map((role) => ({
+      label: role.name.slice(0, 100),
+      value: role.id,
+      description: 'Rolü almak veya kaldırmak için seç',
+    }));
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('role-select:' + group.id)
+    .setPlaceholder(ROLE_MENU_PLACEHOLDERS[group.id] || (group.emoji + ' | ' + group.label))
+    .setMinValues(1)
+    .setMaxValues(Math.max(options.length, 1));
+
+  if (options.length > 0) {
+    select.addOptions(options);
+  } else {
+    select
+      .setDisabled(true)
+      .addOptions({
+        label: 'Bu kategoride henüz rol yok',
+        value: 'empty:' + group.id,
+      });
+  }
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function buildRoleMenuComponents(guildId) {
+  return getRoleMenuGroups(guildId)
+    .slice(0, 5)
+    .map((group) => buildRoleSelectRow(guildId, group));
+}
+
+function buildRoleMenuExtraComponents(guildId) {
+  return getRoleMenuGroups(guildId)
+    .slice(5)
+    .map((group) => buildRoleSelectRow(guildId, group));
+}
+
+function buildRoleMenuPayload(guildId) {
+  return {
+    content: buildRoleMenuContent(),
+    embeds: [],
+    components: buildRoleMenuComponents(guildId),
+    allowedMentions: { parse: [] },
+  };
+}
+
+function buildRoleMenuExtraPayload(guildId) {
+  const components = buildRoleMenuExtraComponents(guildId);
+  return components.length > 0
+    ? { content: '\u200b', components }
+    : null;
+}
+
 function getGroupRoles(guildId, groupId) {
   return getMenuRoles(guildId).filter((role) => role.group === groupId).slice(0, 25);
 }
