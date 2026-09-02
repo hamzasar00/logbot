@@ -347,34 +347,56 @@ function blackjackScore(cards) {
 }
 
 function blackjackCards(cards, hideFirst = false) {
-  return cards.map((card, index) => hideFirst && index === 0 ? '🂠' : card.label).join(' ');
+  return cards.map((card, index) => hideFirst && index === 0 ? '[ 🂠 ]' : '[ ' + card.label + ' ]').join('  ');
 }
 
-function blackjackButtons(userId, disabled = false) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('blackjack:hit:' + userId).setLabel('Kart çek').setEmoji('🃏').setStyle(ButtonStyle.Primary).setDisabled(disabled),
-    new ButtonBuilder().setCustomId('blackjack:stand:' + userId).setLabel('Dur').setEmoji('🛑').setStyle(ButtonStyle.Success).setDisabled(disabled)
+function blackjackProgress(score) {
+  const safeScore = Math.min(21, Math.max(0, score));
+  const filled = Math.round((safeScore / 21) * 10);
+  return '🟦'.repeat(filled) + '⬛'.repeat(10 - filled) + ' ' + score + '/21';
+}
+
+function blackjackButtons(userId, finished = false) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('blackjack:hit:' + userId).setLabel('Kart çek').setEmoji('🃏').setStyle(ButtonStyle.Primary).setDisabled(finished),
+    new ButtonBuilder().setCustomId('blackjack:stand:' + userId).setLabel('Dur').setEmoji('🛑').setStyle(ButtonStyle.Success).setDisabled(finished)
   );
+  if (finished) row.addComponents(new ButtonBuilder().setCustomId('blackjack:new:' + userId).setLabel('Yeni oyun').setEmoji('🔄').setStyle(ButtonStyle.Secondary));
+  return row;
 }
 
 function blackjackEmbed(game, finished = false, resultText = '') {
   const playerScore = blackjackScore(game.player);
   const dealerScore = blackjackScore(game.dealer);
+  const status = resultText || 'Hamleni seç: kart çek veya dur.';
+  const color = finished ? (resultText?.includes('Kazandın') || resultText?.includes('21 yaptın') ? 0x22C55E : resultText?.includes('patladı') || resultText?.includes('kaybettin') ? 0xEF4444 : 0xF59E0B) : 0x7C3AED;
+  const mono = String.fromCharCode(96).repeat(3);
+  const lineBreak = String.fromCharCode(10);
+  const table = mono + lineBreak + '╭──────── 🃏 BLACKJACK MASASI ────────╮' + lineBreak +
+    '│ 🏦 DAĞITICI  ' + (finished ? String(dealerScore).padStart(2, ' ') : ' ?') + '  ' + blackjackCards(game.dealer, !finished) + lineBreak +
+    '│ 🎯 OYUNCU    ' + String(playerScore).padStart(2, ' ') + '  ' + blackjackCards(game.player) + lineBreak +
+    '╰─────────────────────────────────────╯' + lineBreak + mono;
   return new EmbedBuilder()
-    .setTitle('🃏 Blackjack')
-    .setColor(finished ? 0x64748B : 0x2563EB)
+    .setTitle('♠️♥️  BLACKJACK  ♦️♣️')
+    .setDescription(table + lineBreak + '🎯 Senin ilerlemen' + lineBreak + blackjackProgress(playerScore))
+    .setColor(color)
     .addFields(
-      { name: 'Senin elin (' + playerScore + ')', value: blackjackCards(game.player) || '—', inline: false },
-      { name: 'Dağıtıcının eli (' + (finished ? dealerScore : '?') + ')', value: blackjackCards(game.dealer, !finished) || '—', inline: false }
+      { name: '🎯 Oyuncu eli', value: blackjackCards(game.player) + lineBreak + 'Toplam: **' + playerScore + '**', inline: true },
+      { name: '🏦 Dağıtıcı eli', value: blackjackCards(game.dealer, !finished) + lineBreak + 'Toplam: **' + (finished ? dealerScore : '?') + '**', inline: true },
+      { name: '📌 Durum', value: status, inline: false }
     )
-    .setFooter({ text: resultText || '21’e yaklaşmaya çalış. 5 dakika içinde hamle yap.' });
+    .setFooter({ text: finished ? 'Oyun tamamlandı · Yeni oyun butonuna basabilirsin' : '5 dakika içinde hamle yap · Bahis yok, sadece eğlence' });
 }
 
 function blackjackResult(game) {
   const playerScore = blackjackScore(game.player);
   const dealerScore = blackjackScore(game.dealer);
+  const playerNatural = playerScore === 21 && game.player.length === 2;
+  const dealerNatural = dealerScore === 21 && game.dealer.length === 2;
   if (playerScore > 21) return '💥 Elin patladı. Kaybettin.';
   if (dealerScore > 21) return '🎉 Dağıtıcının eli patladı. Kazandın!';
+  if (playerNatural && !dealerNatural) return '🃏 Blackjack! Kazandın!';
+  if (dealerNatural && !playerNatural) return '😕 Dağıtıcı blackjack yaptı.';
   if (playerScore > dealerScore) return '🎉 Kazandın!';
   if (playerScore < dealerScore) return '😕 Dağıtıcı kazandı.';
   return '🤝 Berabere.';
@@ -383,7 +405,7 @@ function blackjackResult(game) {
 async function finishBlackjack(interaction, game, resultText) {
   clearTimeout(game.timeout);
   blackjackGames.delete(game.key);
-  return interaction.update({ embeds: [blackjackEmbed(game, true, resultText)], components: [] });
+  return interaction.update({ embeds: [blackjackEmbed(game, true, resultText)], components: [blackjackButtons(game.userId, true)] });
 }
 
 async function startBlackjackCommand(context) {
@@ -407,6 +429,7 @@ async function handleBlackjackButton(interaction) {
   if (interaction.user.id !== ownerId) return interaction.reply({ content: 'Bu blackjack oyunu başka bir kullanıcıya ait.', ephemeral: true });
   const key = interaction.guild.id + ':' + ownerId;
   const game = blackjackGames.get(key);
+  if (action === 'new') return startBlackjackCommand(interaction);
   if (!game) return interaction.reply({ content: 'Bu blackjack oyununun süresi dolmuş. Yeni oyun için .blackjack yaz.', ephemeral: true });
   if (action === 'hit') {
     game.player.push(game.deck.pop());
