@@ -482,45 +482,94 @@ function buildRoomMenuEmbed() {
     );
 }
 
-function buildStaticRoleMenuEmbed(guildId) {
-  const roles = getMenuRoles(guildId);
-  const categorizedCount = roles.filter((role) => role.group !== 'general').length;
-
-  return new EmbedBuilder()
-    .setTitle('👥 Rol Seçim Menüsü')
-    .setColor(Colors.Purple)
-    .setDescription(
-      'Sunucudaki bildirim ve topluluk rollerini aşağıdaki seçim menüsünden seçebilirsin.\n\n' +
-      'Önce bir kategori seç, ardından açılan rol menüsünden almak istediğin rolleri işaretle. Seçimi kaldırınca rolün de kaldırılır.'
-    )
-    .addFields(
-      { name: '📌 Bilgi', value: 'Kategoriye tıkla, açılan listeden rollerini seç.', inline: false },
-      { name: '🎭 Toplam Rol', value: String(roles.length), inline: true },
-      { name: '📂 Kategorili Rol', value: String(categorizedCount), inline: true },
-      { name: '⚙️ Yönetici', value: 'Rol eklemek için .roller-ekle @rol emoji kategori kullan.', inline: false },
-    );
+function buildRoleMenuContent() {
+  return [
+    '📣 Sunucuda etiket atıp rahatsızlık vermemek için @everyone ve @here kullanmayınız.',
+    'o yüzden çekiliş ve etkinlik katılımcısı rollerinizi almayı unutmayın.',
+    '',
+    '• Etkinlik Katılımcısı: Sunucuda düzenlenen tüm etkinliklere katılmak için.',
+    '• Çekiliş Katılımcısı: Sunucuda düzenlenen tüm çekilişlere katılmak için.',
+    '',
+    '> **Not:** Renk rollerini alabilmek için "Booster veya Family" rolleri gerekmektedir.',
+  ].join('\n');
 }
-function buildRoleMenuComponents(guildId) {
-  const roles = getMenuRoles(guildId);
-  // Kategoriler ana mesajda tek bir seçim menüsü olarak gösterilir.
-  const availableGroups = [...ROLE_MENU_GROUPS];
-  if (roles.some((role) => role.group === 'general')) {
-    availableGroups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
+
+const ROLE_MENU_PLACEHOLDERS = Object.freeze({
+  event: '🎉 | Etkinlik Rolleri Seçin',
+  color: '🎨 | Renk Rolleri Seçin...',
+  zodiac: '⭐ | Burç Rolleri Seçin...',
+  game: '🎮 | Oyun Rolleri Seçin',
+  team: '⚽ | Takım Rolleri Seçin...',
+  relationship: '💍 | İlişki Rolleri Seçin...',
+  general: '🎭 | Diğer Rolleri Seçin...',
+});
+
+function getRoleMenuGroups(guildId) {
+  const groups = [...ROLE_MENU_GROUPS];
+  if (getMenuRoles(guildId).some((role) => role.group === 'general')) {
+    groups.push({ id: 'general', emoji: '🎭', label: 'Diğer Rolleri Seç' });
+  }
+  return groups;
+}
+
+function buildRoleSelectRow(guildId, group) {
+  const roles = getGroupRoles(guildId, group.id);
+  const options = roles
+    .map(({ role_id }) => role_id)
+    .map((roleId) => client.guilds.cache.get(guildId)?.roles.cache.get(roleId))
+    .filter((role) => role && !role.managed)
+    .map((role) => ({
+      label: role.name.slice(0, 100),
+      value: role.id,
+      description: 'Rolü almak veya kaldırmak için seç',
+    }));
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('role-select:' + group.id)
+    .setPlaceholder(ROLE_MENU_PLACEHOLDERS[group.id] || (group.emoji + ' | ' + group.label))
+    .setMinValues(1)
+    .setMaxValues(Math.max(options.length, 1));
+
+  if (options.length > 0) {
+    select.addOptions(options);
+  } else {
+    select
+      .setDisabled(true)
+      .addOptions({
+        label: 'Bu kategoride henüz rol yok',
+        value: 'empty:' + group.id,
+      });
   }
 
-  const categorySelect = new StringSelectMenuBuilder()
-    .setCustomId('role-group-select')
-    .setPlaceholder('Bir rol kategorisi seç')
-    .setMinValues(1)
-    .setMaxValues(1)
-    .addOptions(availableGroups.map((group) => ({
-      label: group.label.replace(' Rolleri Seç', ''),
-      value: group.id,
-      emoji: group.emoji,
-      description: 'Bu kategorideki rolleri görüntüle',
-    })));
+  return new ActionRowBuilder().addComponents(select);
+}
 
-  return [new ActionRowBuilder().addComponents(categorySelect)];
+function buildRoleMenuComponents(guildId) {
+  return getRoleMenuGroups(guildId)
+    .slice(0, 5)
+    .map((group) => buildRoleSelectRow(guildId, group));
+}
+
+function buildRoleMenuExtraComponents(guildId) {
+  return getRoleMenuGroups(guildId)
+    .slice(5)
+    .map((group) => buildRoleSelectRow(guildId, group));
+}
+
+function buildRoleMenuPayload(guildId) {
+  return {
+    content: buildRoleMenuContent(),
+    embeds: [],
+    components: buildRoleMenuComponents(guildId),
+    allowedMentions: { parse: [] },
+  };
+}
+
+function buildRoleMenuExtraPayload(guildId) {
+  const components = buildRoleMenuExtraComponents(guildId);
+  return components.length > 0
+    ? { content: '\u200b', components }
+    : null;
 }
 
 function getRoleMenuGroup(groupId) {
@@ -574,8 +623,7 @@ async function handleRoleGroupButton(interaction) {
 
 async function handleRoleSelect(interaction) {
   const groupId = interaction.customId.replace('role-select:', '');
-  const roles = getGroupRoles(interaction.guild.id, groupId);
-  const selected = new Set(interaction.values);
+  const selectedRoleIds = interaction.values.filter((value) => !value.startsWith('empty:'));
   const botMember = interaction.guild.members.me;
 
   if (!botMember?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
@@ -586,22 +634,20 @@ async function handleRoleSelect(interaction) {
   let added = 0;
   let removed = 0;
   let skipped = 0;
-  for (const { role_id } of roles) {
-    const role = interaction.guild.roles.cache.get(role_id);
+  for (const roleId of selectedRoleIds) {
+    const role = interaction.guild.roles.cache.get(roleId);
     if (!role || role.managed || !role.editable) {
       skipped += 1;
       continue;
     }
 
     try {
-      const hasRole = interaction.member.roles.cache.has(role.id);
-      const shouldHaveRole = selected.has(role.id);
-      if (shouldHaveRole && !hasRole) {
-        await interaction.member.roles.add(role.id);
-        added += 1;
-      } else if (!shouldHaveRole && hasRole) {
+      if (interaction.member.roles.cache.has(role.id)) {
         await interaction.member.roles.remove(role.id);
         removed += 1;
+      } else {
+        await interaction.member.roles.add(role.id);
+        added += 1;
       }
     } catch (error) {
       skipped += 1;
@@ -612,6 +658,7 @@ async function handleRoleSelect(interaction) {
   const suffix = skipped ? '\n⚠️ ' + skipped + ' rol bot tarafından yönetilemiyor.' : '';
   await interaction.reply({ content: '✅ ' + added + ' rol eklendi, ' + removed + ' rol kaldırıldı.' + suffix, ephemeral: true });
 }
+
 function buildRoomMenuComponents() {
   return [
     new ActionRowBuilder().addComponents(
@@ -690,16 +737,40 @@ async function ensureRoleMenuInternal(guild) {
 
   const roleMenuInfo = getRoleMenuMessage(guild.id);
 
+  const isRoleMenuMessage = (message) =>
+    message?.author?.id === client.user.id && (
+      message.embeds?.some((embed) => embed.title === '👥 Rol Seçim Menüsü') ||
+      message.content?.includes('Sunucuda etiket atıp rahatsızlık vermemek için')
+    );
+
+  const isRoleMenuContinuation = (message) =>
+    message?.author?.id === client.user.id &&
+    message.id !== roleMenuInfo?.messageId &&
+    message.components?.some((row) => row.components?.some((component) =>
+      component.customId?.startsWith('role-select:')
+    ));
+
+  const syncExtraMenu = async (roleChannel, messages) => {
+    const extraPayload = buildRoleMenuExtraPayload(guild.id);
+    const continuation = messages?.find(isRoleMenuContinuation);
+    if (extraPayload) {
+      if (continuation) {
+        await continuation.edit(extraPayload);
+      } else {
+        await roleChannel.send(extraPayload);
+      }
+    }
+  };
+
   try {
     if (roleMenuInfo) {
       const channel = guild.channels.cache.get(roleMenuInfo.channelId);
       if (channel && channel.type === ChannelType.GuildText) {
         const message = await channel.messages.fetch(roleMenuInfo.messageId).catch(() => null);
         if (message) {
-          await message.edit({
-            embeds: [buildStaticRoleMenuEmbed(guild.id)],
-            components: buildRoleMenuComponents(guild.id),
-          });
+          await message.edit(buildRoleMenuPayload(guild.id));
+          const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+          await syncExtraMenu(channel, messages);
           return;
         }
       }
@@ -735,22 +806,17 @@ async function ensureRoleMenuInternal(guild) {
     }
 
     const messages = await roleChannel.messages.fetch({ limit: 50 }).catch(() => null);
-    const existingMenu = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '👥 Rol Seçim Menüsü');
+    const existingMenu = messages?.find(isRoleMenuMessage);
     if (existingMenu) {
-      await existingMenu.edit({
-        embeds: [buildStaticRoleMenuEmbed(guild.id)],
-        components: buildRoleMenuComponents(guild.id),
-      });
+      await existingMenu.edit(buildRoleMenuPayload(guild.id));
       saveRoleMenuMessage(guild.id, roleChannel.id, existingMenu.id);
+      await syncExtraMenu(roleChannel, messages);
       return;
     }
 
-    const newMessage = await roleChannel.send({
-      embeds: [buildStaticRoleMenuEmbed(guild.id)],
-      components: buildRoleMenuComponents(guild.id),
-    });
-
+    const newMessage = await roleChannel.send(buildRoleMenuPayload(guild.id));
     saveRoleMenuMessage(guild.id, roleChannel.id, newMessage.id);
+    await syncExtraMenu(roleChannel, messages);
   } catch (error) {
     console.error('Rol menüsü oluşturma hatası:', error);
     throw error;
@@ -1234,10 +1300,7 @@ async function handleRoleCommand(message) {
     return;
   }
 
-  const embed = buildStaticRoleMenuEmbed(message.guild.id);
-  const components = buildRoleMenuComponents(message.guild.id);
-
-  await message.reply({ embeds: [embed], components });
+  await message.reply(buildRoleMenuPayload(message.guild.id));
 }
 
 async function handleHelpCommand(message) {
