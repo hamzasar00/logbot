@@ -21,17 +21,59 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist ".git" (
-  echo Bu klasor bir Git deposu degil.
-  echo Projeyi GitHub'dan V4 branch'i ile clone etmeniz gerekir.
-  pause
-  exit /b 1
-)
-
 if not exist "package.json" (
   echo package.json bulunamadi.
   pause
   exit /b 1
+)
+
+if not exist ".git" (
+  echo.
+  echo Bu klasor ZIP'ten kurulmus. Ilk GitHub baglantisi kuruluyor...
+  echo Uyari: Proje dosyalari V4 ile esitlenecek.
+  echo .env ve data klasoru korunacak.
+  echo.
+
+  git init
+  if errorlevel 1 (
+    echo Git deposu baslatilamadi.
+    pause
+    exit /b 1
+  )
+
+  git remote add origin https://github.com/hamzasar00/logbot.git
+  if errorlevel 1 (
+    echo GitHub uzak deposu eklenemedi.
+    pause
+    exit /b 1
+  )
+
+  echo V4 dosyalari aliniyor...
+  git fetch origin V4
+  if errorlevel 1 (
+    echo GitHub'dan V4 branch'i alinamadi.
+    pause
+    exit /b 1
+  )
+
+  git checkout -B V4 origin/V4 --force
+  if errorlevel 1 (
+    echo V4 branch'i etkinlestirilemedi.
+    pause
+    exit /b 1
+  )
+
+  if not exist "node_modules" (
+    echo Ilk bagimlilik kurulumu yapiliyor...
+    call npm ci --no-audit --no-fund
+    if errorlevel 1 (
+      echo Bagimlilik kurulumu basarisiz oldu.
+      pause
+      exit /b 1
+    )
+  )
+
+  echo Ilk GitHub baglantisi tamamlandi.
 )
 
 for /f "delims=" %%A in ('git branch --show-current 2^>nul') do set "CURRENT_BRANCH=%%A"
