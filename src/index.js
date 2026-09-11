@@ -822,6 +822,8 @@ async function handleRoleSelect(interaction) {
     return;
   }
 
+  await interaction.deferReply({ ephemeral: true });
+
   let added = 0;
   let alreadyHad = 0;
   let skipped = 0;
@@ -849,7 +851,7 @@ async function handleRoleSelect(interaction) {
   let content = '✅ ' + added + ' rol verildi.';
   if (alreadyHad) content += ' ' + alreadyHad + ' rol zaten sende.';
   if (skipped) content += '\n⚠️ ' + skipped + ' rol bot tarafından verilemiyor.';
-  await interaction.reply({ content, ephemeral: true });
+  await interaction.editReply({ content });
 }
 
 function buildRoomMenuComponents() {
@@ -1273,11 +1275,13 @@ async function handleRoomCreateModal(interaction) {
   const safeLimit = Number.isInteger(userLimit) && userLimit > 0 && userLimit <= 99 ? userLimit : 0;
 
   try {
+    await interaction.deferReply({ ephemeral: true });
+
     const roomOwnerMap = getRoomOwnerMap();
     const existingRoom = interaction.guild.channels.cache.find((channel) => getPrivateRoomOwnerId(channel) === interaction.user.id);
     if (existingRoom) {
       roomOwnerMap.set(existingRoom.id, { ownerId: interaction.user.id, channelId: existingRoom.id, guildId: interaction.guild.id, roomName: existingRoom.name });
-      await interaction.reply({ content: `🎧 Zaten açık bir odan var: ${existingRoom}`, ephemeral: true });
+      await interaction.editReply({ content: `🎧 Zaten açık bir odan var: ${existingRoom}` });
       return;
     }
 
@@ -1328,10 +1332,15 @@ async function handleRoomCreateModal(interaction) {
     roomOwnerMap.set(room.id, roomInfo);
     const controlChannel = await ensureRoomControlChannel(interaction.guild, roomInfo);
 
-    await interaction.reply({ content: '🎧 Oda hazır: ' + room + (controlChannel ? '\n🛠️ Yönetim sohbeti: ' + controlChannel : ''), ephemeral: true });
+    await interaction.editReply({ content: '🎧 Oda hazır: ' + room + (controlChannel ? '\n🛠️ Yönetim sohbeti: ' + controlChannel : '') });
   } catch (error) {
     console.error('Oda oluşturma hatası:', error);
-    await interaction.reply({ content: '⚠️ Oda oluşturulurken bir hata oluştu.', ephemeral: true });
+    const errorReply = { content: '⚠️ Oda oluşturulurken bir hata oluştu.' };
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(errorReply).catch(() => {});
+    } else {
+      await interaction.reply({ ...errorReply, ephemeral: true }).catch(() => {});
+    }
   }
 }
 
@@ -1782,6 +1791,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
+    await interaction.deferReply({ ephemeral: true });
+
     const canAccess = action === 'room-members-add';
     let changedCount = 0;
     for (const userId of interaction.values) {
@@ -1803,11 +1814,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    await interaction.reply({
+    await interaction.editReply({
       content: canAccess
         ? '✅ ' + changedCount + ' kişi odaya eklendi.'
         : '✅ ' + changedCount + ' kişinin oda erişimi kaldırıldı.',
-      ephemeral: true,
     });
     return;
   }
