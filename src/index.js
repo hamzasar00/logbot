@@ -1,6 +1,10 @@
 const { Client, GatewayIntentBits, ChannelType, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, REST, Routes, ChannelSelectMenuBuilder, UserSelectMenuBuilder, StringSelectMenuBuilder, AuditLogEvent, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
 const { config } = require('dotenv');
 config();
+
+process.on('unhandledRejection', (reason) => {
+  console.error('İşlenmeyen promise hatası:', reason instanceof Error ? reason.stack || reason.message : reason);
+});
 const { printBanner, printSuccess, printError } = require('./console-ui');
 const { initializeGuard } = require('./guard');
 
@@ -272,22 +276,26 @@ function truncateText(value, maxLength = 1000) {
 }
 
 async function sendLog(guildId, logGroupKey, embed) {
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild || !isLogEnabled(guildId, logGroupKey)) {
-    return;
-  }
+  try {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild || !isLogEnabled(guildId, logGroupKey)) {
+      return;
+    }
 
-  const channelId = getLogChannel(guildId, logGroupKey);
-  if (!channelId) {
-    return;
-  }
+    const channelId = getLogChannel(guildId, logGroupKey);
+    if (!channelId) {
+      return;
+    }
 
-  const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
-  if (!channel || !channel.isTextBased()) {
-    return;
-  }
+    const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
+    if (!channel || !channel.isTextBased()) {
+      return;
+    }
 
-  await channel.send({ embeds: [embed] });
+    await channel.send({ embeds: [embed] });
+  } catch (error) {
+    console.error('[' + logGroupKey + '] log gönderilemedi:', error?.message || error);
+  }
 }
 
 function buildBoostNotificationEmbed(member) {
@@ -1541,6 +1549,7 @@ client.on(Events.ClientReady, async () => {
 
   for (const guild of client.guilds.cache.values()) {
     try {
+      await ensureSetup(guild);
       await updateGuildInviteSnapshot(guild);
       restorePrivateRoomOwners(guild);
       for (const roomInfo of getRoomOwnerMap().values()) {
@@ -2042,7 +2051,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 });
 
 client.on(Events.MessageDelete, async (message) => {
-  if (message.author?.bot) {
+  if (!message.guild || message.author?.bot) {
     return;
   }
 
@@ -2073,7 +2082,7 @@ client.on(Events.MessageDelete, async (message) => {
 });
 
 client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
-  if (oldMessage.author?.bot || newMessage.author?.bot) {
+  if (!newMessage.guild || !newMessage.author || oldMessage.author?.bot || newMessage.author?.bot) {
     return;
   }
 
@@ -2103,6 +2112,10 @@ client.on(Events.MessageBulkDelete, async (messages) => {
   }
 
   const firstMessage = collection.first();
+  if (!firstMessage?.guild) {
+    return;
+  }
+
   const embed = new EmbedBuilder()
     .setTitle('🧹 Toplu Mesaj Silindi')
     .setColor(Colors.Red)
