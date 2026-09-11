@@ -6,8 +6,8 @@ const path = require('node:path');
 const { spawn, execFile } = require('node:child_process');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
-const PANEL_DIR = path.join(ROOT_DIR, 'public');
 const BOT_SCRIPT = path.join(__dirname, 'index.js');
+const panelMarkup = require('./panel-ui');
 try {
   require('dotenv').config({ path: path.join(ROOT_DIR, '.env') });
 } catch {
@@ -164,12 +164,8 @@ function readRequestBody(req) {
 }
 
 function servePanel(res) {
-  const file = path.join(PANEL_DIR, 'control-panel.html');
-  fs.readFile(file, (error, content) => {
-    if (error) return json(res, 500, { ok: false, error: 'Kontrol paneli bulunamadı.' });
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(content);
-  });
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(panelMarkup);
 }
 
 async function handleRequest(req, res) {
