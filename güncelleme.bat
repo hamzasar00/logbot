@@ -23,7 +23,7 @@ if errorlevel 1 (
 
 if not exist ".git" (
   echo Bu klasor bir Git deposu degil.
-  echo Guncelleme icin projeyi GitHub'dan clone etmeniz gerekir.
+  echo Projeyi GitHub'dan V4 branch'i ile clone etmeniz gerekir.
   pause
   exit /b 1
 )
@@ -34,8 +34,23 @@ if not exist "package.json" (
   exit /b 1
 )
 
-echo GitHub'dan son degisiklikler aliniyor...
-git pull --ff-only
+for /f "delims=" %%A in ('git branch --show-current 2^>nul') do set "CURRENT_BRANCH=%%A"
+if /I not "%CURRENT_BRANCH%"=="V4" (
+  echo Bu guncelleme dosyasi V4 branch'i icin hazirlandi.
+  echo Mevcut branch: %CURRENT_BRANCH%
+  pause
+  exit /b 1
+)
+
+for /f "delims=" %%A in ('git rev-parse HEAD 2^>nul') do set "OLD_COMMIT=%%A"
+if not defined OLD_COMMIT (
+  echo Mevcut commit bilgisi okunamadi.
+  pause
+  exit /b 1
+)
+
+echo GitHub'dan sadece yeni degisiklikler aliniyor...
+git pull --ff-only origin V4
 if errorlevel 1 (
   echo.
   echo Guncelleme yapilamadi. Yerel degisiklik veya Git uyusmazligi olabilir.
@@ -44,17 +59,31 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo.
-echo Bagimliliklar guncelleniyor...
-call npm install
+for /f "delims=" %%A in ('git rev-parse HEAD 2^>nul') do set "NEW_COMMIT=%%A"
+if /I "%OLD_COMMIT%"=="%NEW_COMMIT%" (
+  echo Zaten guncel. Yeni degisiklik yok.
+  goto :done
+)
+
+git diff --name-only "%OLD_COMMIT%" "%NEW_COMMIT%" | findstr /I /R /C:"^package.json$" /C:"^package-lock.json$" >nul
+if errorlevel 1 (
+  echo Kod guncellendi. Paketlerde degisiklik yok; npm kurulumu atlandi.
+  goto :done
+)
+
+echo package.json veya package-lock.json degisti.
+echo Sadece gerekli paketler guncelleniyor...
+call npm ci --no-audit --no-fund
 if errorlevel 1 (
   echo.
-  echo npm install basarisiz oldu.
+  echo Paket guncellemesi basarisiz oldu.
   pause
   exit /b 1
 )
 
+:done
 echo.
 echo Guncelleme tamamlandi.
-echo Botu baslatmak icin baslat.bat dosyasini calistirin.
+echo Bot calisiyorsa degisikliklerin uygulanmasi icin kapatip baslat.bat dosyasini calistirin.
 pause
+exit /b 0
