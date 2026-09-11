@@ -758,7 +758,7 @@ function buildRoleSelectRow(guildId, group) {
     .map((role) => ({
       label: role.name.slice(0, 100),
       value: role.id,
-      description: 'Rolü almak veya kaldırmak için seç',
+      description: 'Rolü almak için seç',
     }));
 
   const select = new StringSelectMenuBuilder()
