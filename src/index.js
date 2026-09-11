@@ -1058,6 +1058,11 @@ async function handleRoleAddCommand(message, args) {
     return;
   }
 
+  if (!message.member?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+    await message.reply('❌ Bu komut için Rolleri Yönet yetkisi gerekir.');
+    return;
+  }
+
   if (args.length < 2) {
     await message.reply('Kullanım: `.roller-ekle @rol :emoji:`\nÖrnek: `.roller-ekle @Moderator 🛡️`');
     return;
@@ -1066,6 +1071,11 @@ async function handleRoleAddCommand(message, args) {
   const roleMatch = message.mentions.roles.first();
   if (!roleMatch) {
     await message.reply('Geçerli bir rol etiketle.');
+    return;
+  }
+
+  if (roleMatch.id === message.guild.id || roleMatch.managed || !roleMatch.editable) {
+    await message.reply('❌ Bu rol bot tarafından yönetilemez. Bot rolünü hedef rolden yukarı taşıyın.');
     return;
   }
 
@@ -1091,6 +1101,11 @@ async function handleRoleAddCommand(message, args) {
 async function handleRoleRemoveCommand(message, args) {
   if (!message.guild) {
     await message.reply('Bu komut bir sunucuda kullanılmalıdır.');
+    return;
+  }
+
+  if (!message.member?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+    await message.reply('❌ Bu komut için Rolleri Yönet yetkisi gerekir.');
     return;
   }
 
@@ -1306,6 +1321,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (!role) {
         await interaction.reply({ content: '❌ Rol bulunamadı.', ephemeral: true });
+        return;
+      }
+
+      if (!role.editable) {
+        await interaction.reply({ content: '❌ Bu rol bot tarafından yönetilemiyor.', ephemeral: true });
         return;
       }
 
