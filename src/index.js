@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, ChannelType, Events, EmbedBuilder, ActionRowB
 const { config } = require('dotenv');
 config();
 const { printBanner, printSuccess, printError } = require('./console-ui');
+const { initializeGuard } = require('./guard');
 
 const discordToken = process.env.DISCORD_TOKEN?.trim();
 if (!discordToken || discordToken === 'your_discord_bot_token_here') {
@@ -2497,6 +2498,8 @@ client.on('shardReconnecting', (shardId) => {
 client.on('invalidated', () => {
   console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
 });
+
+initializeGuard({ client, sendLog });
 
 require('./v2').initializeV3({
   client,
