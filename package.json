@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "check": "node --check src/index.js && node --check src/db.js && node --check src/v2.js && node --check src/v2-db.js && node --check src/console-ui.js"
   },
   "keywords": [
     "discord",
