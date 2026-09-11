@@ -1049,7 +1049,7 @@ function getRoomControlChannel(guild, roomInfo) {
   }
 
   return guild.channels.cache.find((channel) =>
-    channel.type === ChannelType.GuildText && channel.topic === 'logbot-room:' + roomInfo.channelId
+    channel.type === ChannelType.GuildText && channel.topic?.startsWith('logbot-room:' + roomInfo.channelId)
   ) || null;
 }
 
@@ -1120,7 +1120,7 @@ async function ensureRoomControlChannel(guild, roomInfo) {
     const controlOptions = {
       name: 'oda-sohbet-' + voiceChannel.id.slice(-8),
       type: ChannelType.GuildText,
-      topic: 'logbot-room:' + voiceChannel.id,
+      topic: 'logbot-room:' + voiceChannel.id + ':owner:' + roomInfo.ownerId,
       permissionOverwrites: [
         {
           id: guild.roles.everyone.id,
@@ -1142,6 +1142,7 @@ async function ensureRoomControlChannel(guild, roomInfo) {
     }
     controlChannel = await guild.channels.create(controlOptions);
   } else {
+    await controlChannel.setTopic('logbot-room:' + voiceChannel.id + ':owner:' + roomInfo.ownerId).catch(() => null);
     await controlChannel.permissionOverwrites.edit(roomInfo.ownerId, {
       ViewChannel: true,
       SendMessages: true,
@@ -1211,13 +1212,26 @@ function getPrivateRoomOwnerId(channel) {
     return null;
   }
 
-  const ownerOverwrite = channel.permissionOverwrites.cache.find((overwrite) =>
-    overwrite.id !== channel.guild.roles.everyone.id &&
-    channel.guild.members.cache.has(overwrite.id) &&
-    overwrite.allow.has(PermissionsBitField.Flags.Connect) &&
-    overwrite.allow.has(PermissionsBitField.Flags.ViewChannel)
-  );
-  return ownerOverwrite?.id || null;
+  const controlChannel = getRoomControlChannel(channel.guild, { channelId: channel.id });
+  const ownerPrefix = 'logbot-room:' + channel.id + ':owner:';
+  const controlTopic = controlChannel?.topic || '';
+  if (controlTopic.startsWith(ownerPrefix)) {
+    const persistedOwnerId = controlTopic.slice(ownerPrefix.length);
+    if (/^\d+$/.test(persistedOwnerId) && channel.permissionOverwrites.cache.has(persistedOwnerId)) {
+      return persistedOwnerId;
+    }
+  }
+
+  const eligibleOwnerIds = channel.permissionOverwrites.cache
+    .filter((overwrite) =>
+      overwrite.id !== channel.guild.roles.everyone.id &&
+      channel.guild.members.cache.has(overwrite.id) &&
+      overwrite.allow.has(PermissionsBitField.Flags.Connect) &&
+      overwrite.allow.has(PermissionsBitField.Flags.ViewChannel)
+    )
+    .map((overwrite) => overwrite.id);
+
+  return eligibleOwnerIds.length === 1 ? eligibleOwnerIds[0] : null;
 }
 
 function restorePrivateRoomOwners(guild) {
@@ -1280,7 +1294,8 @@ async function handleRoomCreateModal(interaction) {
     const roomOwnerMap = getRoomOwnerMap();
     const existingRoom = interaction.guild.channels.cache.find((channel) => getPrivateRoomOwnerId(channel) === interaction.user.id);
     if (existingRoom) {
-      roomOwnerMap.set(existingRoom.id, { ownerId: interaction.user.id, channelId: existingRoom.id, guildId: interaction.guild.id, roomName: existingRoom.name });
+      const existingControlChannel = getRoomControlChannel(interaction.guild, { channelId: existingRoom.id });
+      roomOwnerMap.set(existingRoom.id, { ownerId: interaction.user.id, channelId: existingRoom.id, guildId: interaction.guild.id, roomName: existingRoom.name, controlChannelId: existingControlChannel?.id || null });
       await interaction.editReply({ content: `🎧 Zaten açık bir odan var: ${existingRoom}` });
       return;
     }
