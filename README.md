@@ -420,6 +420,6 @@ Kayıt tamamlandığında kayıtsız rolü kaldırılır, seçilen cinsiyet rol�
 
 ## v4-clean komut kapsamı
 
-Bu dal log botundan ayrıdır. Log kanalları, otomatik log eventleri, boost log ayarları, `/setup` ve `/log` bu dalda bulunmaz.
+Bu dal log botundan ayrıdır. Log kanalları, otomatik log eventleri, boost log ayarları, `/setup`, `/log` ve Blackjack sistemi bu dalda bulunmaz.
 
-Korunan ana özellikler: register, moderasyon, seviye/XP, leaderboard ve özel ses odaları. Slash komutları arasında `/register`, `/register-roller`, `/uyar`, `/filtre`, `/leaderboard`, `/seviye`, `/blackjack`, `/oda`, `/oda-devret`, `/oda-kilitle`, `/oda-limit`, `/roller` ve `/help` bulunur.
+Korunan ana özellikler: register, moderasyon, seviye/XP, leaderboard ve özel ses odaları. Özel oda kategorisini yönetici `/oda-kategori kategori:#Kategori` ile ayarlar. Slash komutları arasında `/register`, `/register-roller`, `/uyar`, `/filtre`, `/leaderboard`, `/seviye`, `/oda`, `/oda-kategori`, `/oda-devret`, `/oda-kilitle`, `/oda-limit`, `/roller` ve `/help` bulunur.
