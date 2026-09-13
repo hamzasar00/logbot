@@ -420,23 +420,42 @@ const leaderboardCategories = {
   invite: { key: 'invites', label: 'Davet', unit: 'davet' },
 };
 
+function formatVoiceHours(minutes) {
+  const totalMinutes = Math.max(0, Number(minutes) || 0);
+  const hours = Math.floor(totalMinutes / 60);
+  const rest = totalMinutes % 60;
+  return hours + ' sa ' + rest + ' dk';
+}
+
 async function buildLeaderboardEmbed(guild) {
   const config = getGuild(guild.id);
-  const rows = getLevelLeaderboard(guild.id, 10);
+  const levelRows = getLevelLeaderboard(guild.id, 10);
   const statsUsers = config.stats?.users || {};
-  const description = rows.length
-    ? rows.map((row, index) => {
-      const stats = statsUsers[row.userId] || {};
-      return '**' + (index + 1) + '.** <@' + row.userId + '> — **Seviye ' + row.level + '** · ' + row.xp + ' XP\n' +
-        '↳ ' + levelProgressText(row) + '\n' +
-        '↳ ' + (stats.messages || row.messages || 0) + ' mesaj · ' + (stats.voiceMinutes || 0) + ' dk ses · ' + (stats.invites || 0) + ' davet';
-    }).join('\n')
-    : 'Henüz seviye verisi oluşmadı. Seviye sistemi açıldığında istatistikler burada görünecek.';
+  const metricRows = (key) => getLeaderboard(guild.id, key, 10);
+  const memberLabel = (userId) => {
+    const member = guild.members.cache.get(userId);
+    return member?.displayName ? member.displayName : '<@' + userId + '>';
+  };
+  const levelText = levelRows.length
+    ? levelRows.map((row, index) => '**' + (index + 1) + '.** ' + memberLabel(row.userId) + ' — **Seviye ' + row.level + '** · ' + row.xp + ' XP').join('\n')
+    : 'Henüz seviye verisi yok.';
+  const metricText = (key, formatter) => {
+    const rows = metricRows(key);
+    return rows.length
+      ? rows.map((row, index) => '**' + (index + 1) + '.** ' + memberLabel(row.userId) + ' — **' + formatter(row.value) + '**').join('\n')
+      : 'Henüz veri yok.';
+  };
   return new EmbedBuilder()
-    .setTitle('📊 Sunucu Leaderboard · Seviye')
-    .setDescription(description.slice(0, 4000))
+    .setTitle('🏆 Sunucu Leaderboard')
+    .setDescription('Seviye, XP, ses süresi, mesaj ve davet sıralaması')
     .setColor(0x8B5CF6)
-    .setFooter({ text: 'Sıralama: seviye > XP > mesaj · Panel 60 saniyede bir güncellenir' })
+    .addFields(
+      { name: '⭐ Seviye / XP', value: levelText.slice(0, 1024), inline: false },
+      { name: '💬 Metin Mesajı', value: metricText('messages', (value) => value + ' mesaj').slice(0, 1024), inline: true },
+      { name: '🎧 Ses Süresi', value: metricText('voiceMinutes', formatVoiceHours).slice(0, 1024), inline: true },
+      { name: '📨 Davet', value: metricText('invites', (value) => value + ' davet').slice(0, 1024), inline: false },
+    )
+    .setFooter({ text: 'Panel 60 saniyede bir güncellenir.' })
     .setTimestamp();
 }
 
