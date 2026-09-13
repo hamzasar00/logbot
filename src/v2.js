@@ -759,6 +759,7 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
       await snapshotInvites(guild);
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => printError('V3 slash komutları kaydedilemedi', error));
+      updateGuildSection(guild.id, 'stats', { enabled: false });
       await refreshLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli yenilenemedi:', error.message));
     }
     printSuccess('V3 modülleri hazır • moderasyon • hoş geldin • özel oda • istatistik • seviye • slash komutları');
