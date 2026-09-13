@@ -7,6 +7,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
+const sharp = require('sharp');
 const {
   getGuild,
   updateGuildSection,
@@ -482,18 +483,89 @@ async function ensureLeaderboardPanel(guild) {
   return refreshLeaderboardPanel(guild);
 }
 
+function xmlEscape(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function formatLeaderboardValue(key, value) {
+  const number = Number(value) || 0;
+  if (key === 'voiceMinutes') {
+    const hours = Math.floor(number / 60);
+    const minutes = number % 60;
+    return hours ? hours + 's ' + minutes + 'dk' : minutes + 'dk';
+  }
+  return number.toLocaleString('tr-TR');
+}
+
+async function avatarDataUri(guild, userId) {
+  try {
+    const member = guild.members.cache.get(userId);
+    const user = member?.user || await client.users.fetch(userId);
+    const response = await fetch(user.displayAvatarURL({ extension: 'png', size: 64 }));
+    if (!response.ok) return null;
+    const type = response.headers.get('content-type') || 'image/png';
+    return 'data:' + type + ';base64,' + Buffer.from(await response.arrayBuffer()).toString('base64');
+  } catch {
+    return null;
+  }
+}
+
+async function buildLeaderboardPng(guild) {
+  const columns = [
+    { key: 'voiceMinutes', title: 'SES LİDERİ', color: '#12d9ff', glow: '#087f99' },
+    { key: 'messages', title: 'MESAJ LİDERİ', color: '#b229ff', glow: '#6b0f9b' },
+    { key: 'invites', title: 'DAVET LİDERİ', color: '#12ee9b', glow: '#087b55' },
+  ];
+  const allRows = columns.map((column) => ({ ...column, rows: getLeaderboard(guild.id, column.key, 5) }));
+  const leaderIds = allRows.map((column) => column.rows[0]?.userId).filter(Boolean);
+  const rowIds = allRows.flatMap((column) => column.rows.map((row) => row.userId));
+  const avatarIds = [...new Set([...leaderIds, ...rowIds])];
+  const avatars = new Map(await Promise.all(avatarIds.map(async (id) => [id, await avatarDataUri(guild, id)])));
+  const memberName = (userId) => {
+    const member = guild.members.cache.get(userId);
+    return (member?.displayName || member?.user?.username || 'Kullanıcı').slice(0, 18);
+  };
+  const avatar = (userId, x, y, size, fallbackColor, clipId) => {
+    const data = avatars.get(userId);
+    if (!data) return '<circle cx="' + x + '" cy="' + y + '" r="' + (size / 2) + '" fill="' + fallbackColor + '" />';
+    return '<clipPath id="' + clipId + '"><circle cx="' + x + '" cy="' + y + '" r="' + (size / 2) + '" /></clipPath><image href="' + data + '" x="' + (x - size / 2) + '" y="' + (y - size / 2) + '" width="' + size + '" height="' + size + '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + clipId + ')" />';
+  };
+  const columnSvg = allRows.map((column, columnIndex) => {
+    const x = 24 + columnIndex * 392;
+    const leader = column.rows[0];
+    const leaderValue = leader ? formatLeaderboardValue(column.key, leader.value) : '0';
+    const leaderName = leader ? memberName(leader.userId) : 'Henüz veri yok';
+    const leaderAvatar = leader ? avatar(leader.userId, x + 178, 93, 92, column.glow, 'leader-' + columnIndex) : '<circle cx="' + (x + 178) + '" cy="93" r="46" fill="' + column.glow + '" />';
+    const rows = column.rows.length ? column.rows.map((row, index) => {
+      const y = 236 + index * 54;
+      const value = formatLeaderboardValue(column.key, row.value);
+      return '<rect x="' + x + '" y="' + y + '" width="344" height="43" rx="10" fill="#171820" />' + avatar(row.userId, x + 31, y + 21, 30, column.glow, 'row-' + columnIndex + '-' + index) + '<text x="' + (x + 57) + '" y="' + (y + 18) + '" fill="#f4f4f7" font-size="13" font-weight="700">' + (index + 1) + '  ' + xmlEscape(memberName(row.userId)) + '</text><text x="' + (x + 57) + '" y="' + (y + 34) + '" fill="#777b8a" font-size="10">' + value + '</text>';
+    }).join('') : '<text x="' + (x + 172) + '" y="258" text-anchor="middle" fill="#777b8a" font-size="12">Henüz veri yok</text>';
+    return '<g><circle cx="' + (x + 178) + '" cy="93" r="50" fill="none" stroke="' + column.color + '" stroke-width="3" /><circle cx="' + (x + 178) + '" cy="93" r="56" fill="none" stroke="' + column.glow + '" stroke-opacity=".25" stroke-width="9" />' + leaderAvatar + '<rect x="' + (x + 76) + '" y="153" width="204" height="25" rx="12" fill="' + column.glow + '" fill-opacity=".35" /><circle cx="' + (x + 91) + '" cy="165" r="4" fill="' + column.color + '" /><text x="' + (x + 102) + '" y="169" fill="' + column.color + '" font-size="11" font-weight="800">' + column.title + '</text><text x="' + (x + 172) + '" y="204" text-anchor="middle" fill="#f4f4f7" font-size="16" font-weight="800">' + xmlEscape(leaderName) + '</text><text x="' + (x + 172) + '" y="220" text-anchor="middle" fill="#858995" font-size="10">Toplam <tspan fill="' + column.color + '" font-weight="700">' + leaderValue + '</tspan></text>' + rows + '</g>';
+  }).join('');
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#24252c"/><stop offset="1" stop-color="#17181e"/></linearGradient></defs><rect width="1200" height="560" fill="url(#bg)"/><rect x="8" y="28" width="1184" height="510" rx="24" fill="#090a10" stroke="#252631" stroke-width="2"/>' + columnSvg + '<text x="600" y="526" text-anchor="middle" fill="#555866" font-size="10">Sunucu Leaderboard • Canlı veriler</text></svg>';
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
 async function refreshLeaderboardPanel(guild) {
   const panel = getGuild(guild.id).levels.leaderboard;
   if (!panel.enabled || !panel.channelId) return false;
   const channel = await textChannel(guild, panel.channelId);
   if (!channel) return false;
-  const embed = await buildLeaderboardEmbed(guild);
+  let image;
+  try {
+    image = await buildLeaderboardPng(guild);
+  } catch (error) {
+    printError('PNG leaderboard oluşturulamadı: ' + error.message);
+    return false;
+  }
+  const file = { attachment: image, name: 'leaderboard.png' };
   let message = panel.messageId ? await channel.messages.fetch(panel.messageId).catch(() => null) : null;
   if (message) {
-    await message.edit({ embeds: [embed] }).catch(() => {});
-    return true;
+    const edited = await message.edit({ content: '', embeds: [], files: [file] }).catch(() => null);
+    if (edited) return true;
   }
-  message = await channel.send({ embeds: [embed] }).catch(() => null);
+  message = await channel.send({ files: [file] }).catch(() => null);
   if (!message) return false;
   updateGuildSection(guild.id, 'levels', { leaderboard: { enabled: true, channelId: channel.id, messageId: message.id } });
   return true;
