@@ -1034,7 +1034,7 @@ async function handleHelpCommand(message) {
 client.on(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'online',
-    activities: [{ name: 'Darth.vfx', type: 3 }],
+    activities: [{ name: '🔊 Ses kanalına girerek özel oda oluştur', type: 3 }],
   });
   printBanner(client);
 
