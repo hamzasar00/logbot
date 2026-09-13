@@ -598,7 +598,6 @@ function buildRoomManagementEmbed() {
     .setTitle('# Özel Oda Kontrol Paneli')
     .setDescription('Özel odanı aşağıdaki seçeneklerle yönetebilirsin.')
     .setColor(0x2B2D31)
-    .setImage('https://raw.githubusercontent.com/hamzasar00/logbot/v4-clean/assets/morea-banner.png')
     .addFields(
       { name: '➕ ### Üye Ekle', value: 'Özel odana istediğin kullanıcıyı ekler.', inline: false },
       { name: '➖ ### Üye Çıkar', value: 'Kullanıcının özel odana giriş iznini kaldırır.', inline: false },
