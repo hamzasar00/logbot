@@ -221,7 +221,7 @@ async function filterCommand(context, action, suppliedWord) {
 }
 
 async function applyModeration(message, sendLog) {
-  if (!message.guild || message.author.bot || message.content.startsWith('.')) return;
+  if (!message.guild || message.author.bot) return;
   const config = getGuild(message.guild.id).moderation;
   if (!config.enabled || !message.member || isManager(message.member)) return;
   const content = message.content;
@@ -769,27 +769,6 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
   client.on(Events.MessageCreate, async (message) => {
     try {
       if (message.author.bot || !message.guild) return;
-    if (message.content.startsWith('.')) {
-      const args = message.content.slice(1).trim().split(/\s+/);
-      const command = (args.shift() || '').toLocaleLowerCase('tr-TR');
-      const context = Object.create(message);
-      context.args = args;
-      if (['uyar', 'uyarı'].includes(command)) return runV2Command(() => warningCommand(context, 'add'), context, command);
-      if (['uyarilar', 'uyarılar'].includes(command)) return runV2Command(() => warningCommand(context, 'list'), context, command);
-      if (['uyarisil', 'uyari-sil', 'uyarı-sil'].includes(command)) return runV2Command(() => warningCommand(context, 'clear'), context, command);
-      if (command === 'filtre') return runV2Command(() => filterCommand(context, args[0], args[1]), context, command);
-      if (command === 'hosgeldin' || command === 'hoşgeldin') return runV2Command(() => welcomeCommand(context), context, command);
-      if (command === 'istatistik') return runV2Command(() => statsCommand(context), context, command);
-      if (['leaderboard', 'leaderbord', 'liderlik', 'liderboard'].includes(command)) {
-        const panelAction = ['kur', 'yenile', 'kapat'].includes((args[0] || '').toLocaleLowerCase('tr-TR')) ? args.shift() : null;
-        return runV2Command(() => panelAction ? leaderboardPanelCommand(context, panelAction) : leaderboardCommand(context), context, command);
-      }
-      if (command === 'seviye' || command === 'level') return runV2Command(() => levelCommand(context), context, command);
-      if (['seviye-siralama', 'levelboard'].includes(command)) return runV2Command(() => levelLeaderboardCommand(context), context, command);
-      if (command === 'oda-devret') return runV2Command(() => roomCommand(context, 'devret'), context, command);
-      if (command === 'oda-kilitle') return runV2Command(() => roomCommand(context, 'kilitle'), context, command);
-      if (command === 'oda-limit') return runV2Command(() => roomCommand(context, 'limit'), context, command);
-    }
     recordStat(message.guild.id, 'messages', 1, message.author.id);
       await applyModeration(message, sendLog).catch((error) => printError('V3 moderasyon hatası', error));
       await awardLevelXp(message).catch((error) => printError('V3 seviye XP hatası', error));
