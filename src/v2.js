@@ -49,7 +49,8 @@ function isManager(member) {
 
 async function respond(context, payload) {
   if (isInteraction(context)) {
-    if (context.replied || context.deferred) return context.followUp(payload);
+    if (context.deferred) return context.editReply(payload);
+    if (context.replied) return context.followUp(payload);
     return context.reply(payload);
   }
   const safePayload = { ...payload };
@@ -534,7 +535,7 @@ async function leaderboardCommand(context) {
   const requestedLimit = isInteraction(context) ? context.options.getInteger('limit') || 10 : Number(argsOf(context)[1]) || 10;
   const limit = Math.min(10, Math.max(1, Number.isInteger(requestedLimit) ? requestedLimit : 10));
   const rows = getLeaderboard(guild.id, category.key, limit);
-  if (!rows.length) return respond(context, { content: 'Bu kategori için henüz leaderboard verisi yok. Önce `.istatistik ac` ile istatistikleri aç.', ephemeral: true });
+  if (!rows.length) return respond(context, { content: 'Bu kategori için henüz leaderboard verisi yok. Veriler sürekli toplanıyor.', ephemeral: true });
   const lines = rows.map((row, index) => {
     const member = guild.members.cache.get(row.userId);
     const name = member?.displayName ? member.displayName + ' (<@' + row.userId + '>)' : '<@' + row.userId + '>';
@@ -728,6 +729,9 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.deferReply().catch(() => null);
+      }
       const name = interaction.commandName;
       if (commandHandlers[name]) return await commandHandlers[name](interaction);
       if (name === 'uyar') return await warningCommand(interaction, 'add');
@@ -747,7 +751,8 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'oda-limit') return await roomCommand(interaction, 'limit');
     } catch (error) {
       console.error('V3 slash komut hatası:', error);
-      if (!interaction.replied && !interaction.deferred) await interaction.reply({ content: '❌ Komut çalıştırılırken hata oluştu.', ephemeral: true }).catch(() => {});
+      if (interaction.deferred) await interaction.editReply({ content: '❌ Komut çalıştırılırken hata oluştu: ' + String(error.message || error).slice(0, 900) }).catch(() => {});
+      else if (!interaction.replied) await interaction.reply({ content: '❌ Komut çalıştırılırken hata oluştu.', ephemeral: true }).catch(() => {});
     }
   });
 
