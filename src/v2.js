@@ -440,6 +440,29 @@ async function buildLeaderboardEmbed(guild) {
     .setTimestamp();
 }
 
+async function ensureLeaderboardPanel(guild) {
+  const config = getGuild(guild.id).levels.leaderboard;
+  let channel = config.channelId ? await textChannel(guild, config.channelId) : null;
+  if (!channel) {
+    channel = guild.channels.cache.find((candidate) =>
+      candidate.type === ChannelType.GuildText && ['leaderboard', 'sıralama', 'seviye-sıralama'].includes(candidate.name)
+    ) || null;
+  }
+  if (!channel) {
+    channel = await guild.channels.create({
+      name: 'leaderboard',
+      type: ChannelType.GuildText,
+      reason: 'Kalıcı leaderboard paneli oluşturuluyor.',
+    }).catch((error) => {
+      printError('Leaderboard kanalı oluşturulamadı: ' + error.message);
+      return null;
+    });
+  }
+  if (!channel) return false;
+  updateGuildSection(guild.id, 'levels', { leaderboard: { enabled: true, channelId: channel.id, messageId: config.channelId === channel.id ? config.messageId : null } });
+  return refreshLeaderboardPanel(guild);
+}
+
 async function refreshLeaderboardPanel(guild) {
   const panel = getGuild(guild.id).levels.leaderboard;
   if (!panel.enabled || !panel.channelId) return false;
@@ -760,7 +783,7 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => printError('V3 slash komutları kaydedilemedi', error));
       updateGuildSection(guild.id, 'stats', { enabled: false });
-      await refreshLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli yenilenemedi:', error.message));
+      await ensureLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli kurulamadı:', error.message));
     }
     printSuccess('V3 modülleri hazır • moderasyon • hoş geldin • özel oda • istatistik • seviye • slash komutları');
   });
