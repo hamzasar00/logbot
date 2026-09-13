@@ -416,3 +416,8 @@ Kayıt tamamlandığında kayıtsız rolü kaldırılır, seçilen cinsiyet rol�
 - Sıralama önceliği: seviye > XP > mesaj.
 - Sabit leaderboard paneli aynı ilerleme bilgilerini gösterir ve 60 saniyede bir güncellenir.
 - Seviye değeri artık kayıtlı değerden değil, toplam XP üzerinden yeniden hesaplanır.
+
+
+## Slash komutları
+
+Ana bot komutlarının tamamı slash olarak kullanılabilir: `/setup`, `/log`, `/oda`, `/roller`, `/roller-menu`, `/roller-ekle`, `/roller-sil`, `/boost-kanal`, `/boost-gif`, `/boost-test`, `/boost-baslik`, `/boost-mesaj` ve `/help`. Eski nokta prefixleri geriye dönük uyumluluk için korunur.
