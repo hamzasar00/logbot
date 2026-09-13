@@ -576,7 +576,7 @@ async function handleLogCommand(message) {
 function buildHelpEmbed() {
   return new EmbedBuilder()
     .setTitle('🆘 Detaylı Yardım')
-    .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Aşağıdaki eski komutlar nokta (.) prefixi ile kullanılır. Kayıt komutları slash (/) olarak kullanılır.')
+    .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Ana komutlar slash (/) olarak kullanılabilir; eski nokta (.) prefixleri de geriye dönük uyumluluk için açıktır.')
     .setColor(Colors.Blurple)
     .addFields(
       {
@@ -2478,16 +2478,71 @@ client.on('invalidated', () => {
   console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
 });
 
+function slashMessageAdapter(interaction, { channel = null, role = null, attachment = null, args = [] } = {}) {
+  return {
+    guild: interaction.guild,
+    member: interaction.member,
+    channel: interaction.channel,
+    author: interaction.user,
+    user: interaction.user,
+    args,
+    mentions: { channels: { first: () => channel }, roles: { first: () => role } },
+    attachments: { first: () => attachment },
+    reply: (payload) => interaction.reply(typeof payload === 'string' ? { content: payload } : payload),
+  };
+}
+
+async function handleBoostChannelSlashCommand(interaction) {
+  return handleBoostChannelCommand(slashMessageAdapter(interaction, { channel: interaction.options.getChannel('kanal') }));
+}
+async function handleBoostGifSlashCommand(interaction) {
+  const remove = interaction.options.getBoolean('kaldir');
+  const url = interaction.options.getString('url');
+  const attachment = interaction.options.getAttachment('gif');
+  return handleBoostGifCommand(slashMessageAdapter(interaction, { attachment, args: remove ? ['kaldır'] : (url ? [url] : []) }), remove ? ['kaldır'] : (url ? [url] : []));
+}
+async function handleBoostTitleSlashCommand(interaction) {
+  const text = interaction.options.getString('baslik');
+  return handleBoostTitleCommand(slashMessageAdapter(interaction, { args: [text] }), [text]);
+}
+async function handleBoostMessageSlashCommand(interaction) {
+  const text = interaction.options.getString('mesaj');
+  return handleBoostMessageCommand(slashMessageAdapter(interaction, { args: [text] }), [text]);
+}
+async function handleRoleAddSlashCommand(interaction) {
+  const role = interaction.options.getRole('rol');
+  const category = interaction.options.getString('kategori');
+  return handleRoleAddCommand(slashMessageAdapter(interaction, { role, args: [role?.name || 'rol', category || ''] }), [role?.name || 'rol', category || '']);
+}
+async function handleRoleRemoveSlashCommand(interaction) {
+  const role = interaction.options.getRole('rol');
+  return handleRoleRemoveCommand(slashMessageAdapter(interaction, { role }));
+}
+async function handleSetupSlashCommand(interaction) { return handleSetupCommand(slashMessageAdapter(interaction)); }
+async function handleLogSlashCommand(interaction) { return handleLogCommand(slashMessageAdapter(interaction)); }
+async function handleRoomSlashCommand(interaction) { return handleRoomCommand(slashMessageAdapter(interaction)); }
+async function handleRoleSlashCommand(interaction) { return handleRoleCommand(slashMessageAdapter(interaction)); }
+async function handleRoleMenuSlashCommand(interaction) { return handleRoleMenuCommand(slashMessageAdapter(interaction)); }
+async function handleHelpSlashCommand(interaction) { return handleHelpCommand(slashMessageAdapter(interaction)); }
+
 require('./v2').initializeV3({
   client,
   rest,
   sendLog,
   commandHandlers: {
-    setup: handleSetupCommand,
-    log: handleLogCommand,
-    oda: handleRoomCommand,
-    roller: handleRoleCommand,
-    help: handleHelpCommand,
+    setup: handleSetupSlashCommand,
+    log: handleLogSlashCommand,
+    oda: handleRoomSlashCommand,
+    roller: handleRoleSlashCommand,
+    help: handleHelpSlashCommand,
+    'boost-kanal': handleBoostChannelSlashCommand,
+    'boost-gif': handleBoostGifSlashCommand,
+    'boost-test': (interaction) => handleBoostTestCommand(slashMessageAdapter(interaction)),
+    'boost-baslik': handleBoostTitleSlashCommand,
+    'boost-mesaj': handleBoostMessageSlashCommand,
+    'roller-ekle': handleRoleAddSlashCommand,
+    'roller-sil': handleRoleRemoveSlashCommand,
+    'roller-menu': handleRoleMenuSlashCommand,
   },
 });
 
