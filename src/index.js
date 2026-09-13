@@ -110,6 +110,11 @@ function scheduleBotVoiceReconnect(guild) {
 async function keepBotInConfiguredVoiceChannel(guild) {
   const target = getConfiguredBotVoiceChannel(guild);
   if (!target || !guild.voiceAdapterCreator) return null;
+  const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+  if (!botMember || !botMember.permissionsIn(target).has(PermissionsBitField.Flags.ViewChannel) || !botMember.permissionsIn(target).has(PermissionsBitField.Flags.Connect)) {
+    printError('Botun </> ses kanalında Görüntüle ve Bağlan izni yok.');
+    return null;
+  }
   const existing = getVoiceConnection(guild.id);
   if (existing?.joinConfig?.channelId === target.id) return existing;
   existing?.destroy();
@@ -120,6 +125,10 @@ async function keepBotInConfiguredVoiceChannel(guild) {
     adapterCreator: guild.voiceAdapterCreator,
     selfDeaf: true,
     selfMute: true,
+  });
+  connection.on('error', (error) => {
+    console.error('Bot ses bağlantısı hatası:', error.message);
+    scheduleBotVoiceReconnect(guild);
   });
   connection.on(VoiceConnectionStatus.Disconnected, async () => {
     try {
@@ -664,9 +673,14 @@ async function handleRoomLimitModal(interaction, roomChannelId) {
   if (!roomInfo || roomInfo.ownerId !== interaction.user.id || !room || room.type !== ChannelType.GuildVoice) return interaction.reply({ content: '❌ Bu işlem için oda sahibi olmalısın.', ephemeral: true });
   const limit = Number.parseInt(interaction.fields.getTextInputValue('room-limit-input').trim(), 10);
   if (!Number.isInteger(limit) || limit < 0 || limit > 99) return interaction.reply({ content: '❌ Limit 0 ile 99 arasında olmalı.', ephemeral: true });
-  await room.setUserLimit(limit);
-  await ensureRoomManagementPanel(getRoomControlChannel(interaction.guild, roomInfo), room, roomInfo);
-  return interaction.reply({ content: '✅ Oda limiti ' + limit + ' olarak ayarlandı.', ephemeral: true });
+  try {
+    await room.setUserLimit(limit);
+    await refreshRoomManagementPanel(interaction.guild);
+    return interaction.reply({ content: '✅ Oda limiti ' + limit + ' olarak ayarlandı.', ephemeral: true });
+  } catch (error) {
+    console.error('Oda limiti güncelleme hatası:', error);
+    return interaction.reply({ content: '❌ Oda limiti ayarlanamadı. Botun kanalı yönetme iznini kontrol et.', ephemeral: true });
+  }
 }
 
 async function handleRoomNameModal(interaction, roomChannelId) {
@@ -678,29 +692,28 @@ async function handleRoomNameModal(interaction, roomChannelId) {
   await room.setName(name + ' · ' + interaction.user.username);
   roomInfo.roomName = name;
   getRoomOwnerMap().set(roomChannelId, roomInfo);
-  await ensureRoomManagementPanel(getRoomControlChannel(interaction.guild, roomInfo), room, roomInfo);
+  await refreshRoomManagementPanel(interaction.guild);
   return interaction.reply({ content: '✅ Oda ismi güncellendi.', ephemeral: true });
 }
 
 async function ensureRoomManagementPanel(controlChannel, voiceChannel, roomInfo) {
-  if (!controlChannel || controlChannel.type !== ChannelType.GuildText) {
-    return;
-  }
+  if (!controlChannel || controlChannel.type !== ChannelType.GuildText) return;
 
   const messages = await controlChannel.messages.fetch({ limit: 50 }).catch(() => null);
   const existingMessage = messages?.find((message) =>
-    message.author.id === client.user.id && (message.embeds[0]?.title === '🎧 Oda Yönetimi' || message.embeds[0]?.title === 'Özel Oda Sistemi')
+    message.author.id === client.user.id && [
+      '🎧 Oda Yönetimi',
+      'Özel Oda Sistemi',
+      '# MOREA Özel Oda Kontrol Paneli',
+    ].includes(message.embeds[0]?.title)
   );
   const payload = {
     embeds: [buildRoomManagementEmbed(roomInfo, voiceChannel)],
-    components: buildRoomManagementComponents(voiceChannel.id, voiceChannel),
+    components: buildRoomManagementComponents(voiceChannel?.id || null, voiceChannel),
   };
 
-  if (existingMessage) {
-    await existingMessage.edit(payload);
-  } else {
-    await controlChannel.send(payload);
-  }
+  if (existingMessage) await existingMessage.edit(payload);
+  else await controlChannel.send(payload);
 }
 
 async function ensureRoomControlChannel(guild, roomInfo) {
