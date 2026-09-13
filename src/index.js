@@ -356,6 +356,15 @@ async function ensureRoomMenuInternal(guild) {
   } else if (roomChannel.parentId !== roomCategory.id) {
     await roomChannel.setParent(roomCategory.id).catch(() => null);
   }
+  const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+  if (botMember) {
+    await roomChannel.permissionOverwrites.edit(botMember.id, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true,
+      EmbedLinks: true,
+    }).catch((error) => printError('Özel oda panel izinleri ayarlanamadı', error));
+  }
 
   let triggerChannel = guild.channels.cache.find((channel) =>
     channel.type === ChannelType.GuildVoice && channel.name === 'Özel Oda için Tıkla!' && channel.parentId === roomCategory.id
@@ -540,7 +549,7 @@ function buildRoomManagementComponents(voiceChannelId = null) {
   return [
     new ActionRowBuilder().addComponents(button('add', 'Üye Ekle', ButtonStyle.Success, '➕')),
     new ActionRowBuilder().addComponents(button('remove', 'Üye Çıkar', ButtonStyle.Danger, '➖')),
-    new ActionRowBuilder().addComponents(button('limit', 'Limit', ButtonStyle.Primary, '#')),
+    new ActionRowBuilder().addComponents(button('limit', 'Limit', ButtonStyle.Primary, '#️⃣')),
     new ActionRowBuilder().addComponents(button('lock', 'Kilitle / Aç', ButtonStyle.Secondary, '🔒')),
     new ActionRowBuilder().addComponents(button('name', 'İsim', ButtonStyle.Secondary, '🔄')),
   ];
