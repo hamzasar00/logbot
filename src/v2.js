@@ -583,16 +583,25 @@ async function levelCommand(context) {
   )] });
 }
 
+function levelProgressText(row) {
+  const floor = xpForLevel(row.level);
+  const span = Math.max(1, row.nextXp - floor);
+  const gained = Math.max(0, row.xp - floor);
+  const percent = Math.min(100, Math.floor((gained / span) * 100));
+  const blocks = Math.round(percent / 10);
+  return '🟪'.repeat(blocks) + '⬛'.repeat(10 - blocks) + ' ' + percent + '% · ' + Math.max(0, row.nextXp - row.xp) + ' XP kaldı';
+}
+
 async function levelLeaderboardCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
   const config = getLevelConfig(guild.id);
-  if (!config.enabled && !isManager(context.member)) return respond(context, { content: 'Seviye sistemi kapalı. Yönetici .seviye ac komutuyla açabilir.', ephemeral: true });
+  if (!config.enabled && !isManager(context.member)) return respond(context, { content: 'Seviye sistemi kapalı. Yönetici /seviye ayarlarından açmalı.', ephemeral: true });
   const requestedLimit = isInteraction(context) ? context.options.getInteger('limit') || 10 : Number(argsOf(context)[1]) || 10;
   const rows = getLevelLeaderboard(guild.id, Math.min(10, Math.max(1, requestedLimit)));
   if (!rows.length) return respond(context, { content: 'Henüz seviye verisi yok.', ephemeral: true });
-  const lines = rows.map((row, index) => '**' + (index + 1) + '.** <@' + row.userId + '> — Seviye ' + row.level + ' · ' + row.xp + ' XP');
-  return respond(context, { embeds: [new EmbedBuilder().setTitle('🏆 Seviye sıralaması').setDescription(lines.join('\n')).setColor(0xF59E0B)] });
+  const lines = rows.map((row, index) => '**' + (index + 1) + '.** <@' + row.userId + '> — **Seviye ' + row.level + '** · ' + row.xp + ' XP\n↳ ' + levelProgressText(row) + ' · ' + row.messages + ' mesaj');
+  return respond(context, { embeds: [new EmbedBuilder().setTitle('🏆 Seviye sıralaması').setDescription(lines.join('\n')).setColor(0xF59E0B).setFooter({ text: 'Sıralama: seviye > XP > mesaj' })] });
 }
 
 async function awardLevelXp(message) {
@@ -608,10 +617,10 @@ async function awardLevelXp(message) {
   const rewardRoleId = config.rewards[String(result.level)];
   let rewardText = '';
   if (rewardRoleId && message.member) {
-    const role = message.guild.roles.cache.get(rewardRoleId);
-    if (role && !role.managed) {
-      await message.member.roles.add(role).catch(() => {});
-      rewardText = ' Ödül rolü: ' + role + '.';
+    const role = await getConfiguredRole(message.guild, rewardRoleId);
+    if (role && !role.managed && role.editable) {
+      const added = await message.member.roles.add(role).then(() => true).catch(() => false);
+      if (added) rewardText = ' Ödül rolü: ' + role + '.';
     }
   }
   if (!config.announce) return;
@@ -658,15 +667,16 @@ async function buildLeaderboardEmbed(guild) {
   const description = rows.length
     ? rows.map((row, index) => {
       const stats = statsUsers[row.userId] || {};
-      return '**' + (index + 1) + '.** <@' + row.userId + '> — Seviye **' + row.level + '** · ' + row.xp + ' XP\n' +
+      return '**' + (index + 1) + '.** <@' + row.userId + '> — **Seviye ' + row.level + '** · ' + row.xp + ' XP\n' +
+        '↳ ' + levelProgressText(row) + '\n' +
         '↳ ' + (stats.messages || row.messages || 0) + ' mesaj · ' + (stats.voiceMinutes || 0) + ' dk ses · ' + (stats.invites || 0) + ' davet';
     }).join('\n')
     : 'Henüz seviye verisi oluşmadı. Seviye sistemi açıldığında istatistikler burada görünecek.';
   return new EmbedBuilder()
-    .setTitle('📊 Sunucu Leaderboard')
+    .setTitle('📊 Sunucu Leaderboard · Seviye')
     .setDescription(description.slice(0, 4000))
     .setColor(0x8B5CF6)
-    .setFooter({ text: 'Seviye sistemi · Panel 60 saniyede bir güncellenir' })
+    .setFooter({ text: 'Sıralama: seviye > XP > mesaj · Panel 60 saniyede bir güncellenir' })
     .setTimestamp();
 }
 
@@ -716,7 +726,9 @@ async function leaderboardCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
   const requested = isInteraction(context) ? context.options.getString('kategori') || 'metin' : argsOf(context)[0] || 'metin';
-  const category = leaderboardCategories[requested.toLocaleLowerCase('tr-TR')];
+  const normalizedRequested = requested.toLocaleLowerCase('tr-TR');
+  if (['seviye', 'level', 'lvl'].includes(normalizedRequested)) return levelLeaderboardCommand(context);
+  const category = leaderboardCategories[normalizedRequested];
   if (!category) return respond(context, { content: 'Kategori seç: `metin`, `ses` veya `davet`.', ephemeral: true });
   const requestedLimit = isInteraction(context) ? context.options.getInteger('limit') || 10 : Number(argsOf(context)[1]) || 10;
   const limit = Math.min(10, Math.max(1, Number.isInteger(requestedLimit) ? requestedLimit : 10));
@@ -868,7 +880,7 @@ const slashCommands = [
   { name: 'filtre', description: 'Otomatik moderasyon ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'spam', value: 'spam' }, { name: 'link', value: 'links' }, { name: 'caps', value: 'caps' }, { name: 'invite', value: 'invites' }, { name: 'kelime-ekle', value: 'kelime-ekle' }, { name: 'kelime-sil', value: 'kelime-sil' }] }, { name: 'durum', description: 'ac veya kapat', type: 3 }, { name: 'kelime', description: 'Kelime', type: 3 }] },
   { name: 'hosgeldin', description: 'Hoş geldin ayarları', options: [{ name: 'eylem', description: 'İşlem', type: 3, required: true, choices: [{ name: 'durum', value: 'durum' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }, { name: 'ayril', value: 'ayril' }, { name: 'ayril-kapat', value: 'ayril-kapat' }, { name: 'rol', value: 'rol' }, { name: 'rol-kapat', value: 'rol-kapat' }] }, { name: 'kanal', description: 'Metin kanalı', type: 7, channel_types: [0] }, { name: 'rol', description: 'Otomatik rol', type: 8 }, { name: 'mesaj', description: 'Şablon mesaj', type: 3 }] },
   { name: 'istatistik', description: 'Sunucu istatistikleri', options: [{ name: 'eylem', description: 'İşlem', type: 3, choices: [{ name: 'rapor', value: 'rapor' }, { name: 'ac', value: 'ac' }, { name: 'kapat', value: 'kapat' }] }, { name: 'gun', description: 'Gün sayısı', type: 4, min_value: 1, max_value: 30 }] },
-  { name: 'leaderboard', description: 'Metin, ses ve davet sıralaması', options: [{ name: 'kategori', description: 'Sıralama türü', type: 3, required: true, choices: [{ name: 'metin', value: 'metin' }, { name: 'ses', value: 'ses' }, { name: 'davet', value: 'davet' }] }, { name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
+  { name: 'leaderboard', description: 'Metin, ses, davet veya seviye sıralaması', options: [{ name: 'kategori', description: 'Sıralama türü', type: 3, required: true, choices: [{ name: 'metin', value: 'metin' }, { name: 'ses', value: 'ses' }, { name: 'davet', value: 'davet' }, { name: 'seviye', value: 'seviye' }] }, { name: 'limit', description: 'Gösterilecek kişi sayısı', type: 4, min_value: 1, max_value: 10 }] },
   { name: 'leaderboard-panel', description: 'Sabit leaderboard panelini yönetir', options: [{ name: 'eylem', description: 'Panel işlemi', type: 3, required: true, choices: [{ name: 'kur', value: 'kur' }, { name: 'yenile', value: 'yenile' }, { name: 'kapat', value: 'kapat' }] }, { name: 'kanal', description: 'Panel kanalı', type: 7, channel_types: [0] }] },
   { name: 'blackjack', description: 'Bahisli Blackjack oyna', options: [{ name: 'bahis', description: 'Çip bahis miktarı', type: 4, required: true, min_value: 10, max_value: 1000000 }] },
   { name: 'bakiye', description: 'Çip bakiyeni gösterir' },
