@@ -39,6 +39,7 @@ function createGuildDefaults() {
     },
     blackjack: { channelId: null },
     economy: { currencyName: 'çip', startingBalance: 1000, dailyReward: 500, users: {} },
+    registration: { roleIds: { unregistered: null, female: null, male: null }, users: {} },
   };
 }
 
@@ -152,6 +153,22 @@ function normalizeGuild(value) {
     if (!isPlainObject(value)) { delete guild.economy.users[userId]; continue; }
     if (!Number.isInteger(value.balance) || value.balance < 0) value.balance = 0;
     if (!Number.isFinite(value.dailyAt) || value.dailyAt < 0) value.dailyAt = 0;
+  }
+
+  if (!isPlainObject(guild.registration)) guild.registration = {};
+  guild.registration = mergeDefaults(guild.registration, defaults.registration);
+  if (!isPlainObject(guild.registration.roleIds)) guild.registration.roleIds = {};
+  guild.registration.roleIds = mergeDefaults(guild.registration.roleIds, defaults.registration.roleIds);
+  for (const key of ['unregistered', 'female', 'male']) {
+    if (guild.registration.roleIds[key] !== null && typeof guild.registration.roleIds[key] !== 'string') guild.registration.roleIds[key] = null;
+  }
+  if (!isPlainObject(guild.registration.users)) guild.registration.users = {};
+  for (const [userId, value] of Object.entries(guild.registration.users)) {
+    if (!isPlainObject(value)) { delete guild.registration.users[userId]; continue; }
+    if (typeof value.name !== 'string' || value.name.trim().length < 2 || value.name.trim().length > 32) value.name = 'Üye';
+    if (!Number.isInteger(value.age) || value.age < 13 || value.age > 100) value.age = 13;
+    if (!['female', 'male'].includes(value.gender)) value.gender = 'male';
+    if (typeof value.registeredAt !== 'string') value.registeredAt = new Date(0).toISOString();
   }
 
   if (!isPlainObject(guild.levels.users)) guild.levels.users = {};
@@ -371,7 +388,35 @@ function claimDaily(guildId, userId) {
   return { claimed: true, amount: economy.dailyReward, balance: user.balance, retryAfter: cooldown };
 }
 
+function getRegistrationConfig(guildId) {
+  return getGuild(guildId).registration;
+}
+
+function getRegistrationUser(guildId, userId) {
+  return getRegistrationConfig(guildId).users[userId] || null;
+}
+
+function setRegistrationRoles(guildId, roleIds) {
+  const registration = getRegistrationConfig(guildId);
+  registration.roleIds = { ...registration.roleIds, ...(roleIds || {}) };
+  saveState();
+  return registration.roleIds;
+}
+
+function saveRegistration(guildId, userId, data) {
+  const registration = getRegistrationConfig(guildId);
+  const record = {
+    name: String(data.name || '').trim(),
+    age: Math.trunc(Number(data.age)),
+    gender: data.gender === 'female' ? 'female' : 'male',
+    registeredAt: new Date().toISOString(),
+  };
+  registration.users[userId] = record;
+  saveState();
+  return record;
+}
+
 loadState();
 saveState();
 
-module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, getLevelConfig, addLevelXp, getLevelUser, getLevelLeaderboard, setLevelReward, removeLevelReward, xpForLevel, getEconomy, getBalance, changeBalance, claimDaily, saveState };
+module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, getLevelConfig, addLevelXp, getLevelUser, getLevelLeaderboard, setLevelReward, removeLevelReward, xpForLevel, getEconomy, getBalance, changeBalance, claimDaily, getRegistrationConfig, getRegistrationUser, setRegistrationRoles, saveRegistration, saveState };
