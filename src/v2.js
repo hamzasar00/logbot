@@ -50,7 +50,11 @@ function isManager(member) {
 
 async function respond(context, payload) {
   if (isInteraction(context)) {
-    if (context.deferred) return context.editReply(payload);
+    if (context.deferred) {
+      const safePayload = { ...payload };
+      delete safePayload.ephemeral;
+      return context.editReply(safePayload);
+    }
     if (context.replied) return context.followUp(payload);
     return context.reply(payload);
   }
