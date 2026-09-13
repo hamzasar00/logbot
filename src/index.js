@@ -417,12 +417,13 @@ async function ensureRoomMenuInternal(guild) {
   saveCategoryId(guild.id, 'room', roomCategory.id);
 
   let roomChannel = guild.channels.cache.find((channel) =>
-    channel.type === ChannelType.GuildText && ['özel-oda', 'oda-menusu'].includes(channel.name)
+    channel.type === ChannelType.GuildText && ['özel-oda-panel', 'özel-oda', 'oda-menusu'].includes(channel.name)
   ) || null;
   if (!roomChannel) {
     roomChannel = await guild.channels.create({ name: 'özel-oda', type: ChannelType.GuildText, parent: roomCategory.id, reason: 'Özel oda oluşturma kanalı oluşturuluyor.' });
-  } else if (roomChannel.parentId !== roomCategory.id) {
-    await roomChannel.setParent(roomCategory.id).catch(() => null);
+  } else {
+    if (roomChannel.name !== 'özel-oda-panel') await roomChannel.setName('özel-oda-panel').catch(() => null);
+    if (roomChannel.parentId !== roomCategory.id) await roomChannel.setParent(roomCategory.id).catch(() => null);
   }
   const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
   if (botMember) {
@@ -454,13 +455,8 @@ async function ensureRoomMenuInternal(guild) {
   }
 
   const messages = await roomChannel.messages.fetch({ limit: 50 }).catch(() => null);
-  const existingMessage = messages?.find((message) => message.author.id === client.user.id && [
-    '🎧 Özel Oda Oluşturma',
-    'Özel Oda Sistemi',
-    '# Özel Oda Kontrol Paneli',
-    'Özel Oda Kontrol Paneli',
-  ].includes(message.embeds[0]?.title));
-  const payload = { embeds: [buildRoomManagementEmbed()], components: buildRoomManagementComponents() };
+  const existingMessage = messages?.find(isRoomPanelMessage);
+  const payload = buildRoomManagementPayload();
   if (existingMessage) await existingMessage.edit(payload);
   else await roomChannel.send(payload);
 
@@ -600,64 +596,115 @@ function getRoomControlChannel(guild, roomInfo) {
   ) || null;
 }
 
-function buildRoomManagementEmbed() {
-  return new EmbedBuilder()
-    .setTitle('Özel Oda Kontrol Paneli')
-    .setDescription('Özel odanı aşağıdaki seçeneklerle yönetebilirsin.')
-    .setColor(0x2B2D31)
-    .addFields(
-      { name: '➕ Üye Ekle', value: 'Özel odana istediğin kullanıcıyı ekler.', inline: false },
-      { name: '➖ Üye Çıkar', value: 'Kullanıcının özel odana giriş iznini kaldırır.', inline: false },
-      { name: '🔢 Oda Limiti', value: 'Özel odanın kişi sınırını değiştirir.', inline: false },
-      { name: '🔒 Kilitle / Aç', value: 'Özel odanı kilitler veya yeniden açar.', inline: false },
-      { name: '🔄 Oda İsmi', value: 'Özel odanın ismini istediğin gibi değiştirir.', inline: false }
-    )
-    .setFooter({ text: '» Önce 🔊 Özel Oda Oluştur ses kanalına girerek özel odanı oluştur.' });
-}
-
 function buildRoomManagementComponents(voiceChannelId = null) {
   const suffix = voiceChannelId ? ':' + voiceChannelId : '';
-  const button = (action, label, style, emoji) => new ButtonBuilder()
-    .setCustomId('room-action:' + action + suffix)
-    .setLabel(label)
-    .setEmoji(emoji)
-    .setStyle(style);
-  return [
-    new ActionRowBuilder().addComponents(button('add', 'Üye Ekle', ButtonStyle.Success, '➕')),
-    new ActionRowBuilder().addComponents(button('remove', 'Üye Çıkar', ButtonStyle.Danger, '➖')),
-    new ActionRowBuilder().addComponents(button('limit', 'Limit', ButtonStyle.Primary, '#️⃣')),
-    new ActionRowBuilder().addComponents(button('lock', 'Kilitle / Aç', ButtonStyle.Secondary, '🔒')),
-    new ActionRowBuilder().addComponents(button('name', 'İsim', ButtonStyle.Secondary, '🔄')),
-  ];
+  const button = (action, label, style) => ({
+    type: 2,
+    style,
+    label,
+    custom_id: 'room-action:' + action + suffix,
+  });
+  const section = (title, description, action, label, style = 2) => ({
+    type: 9,
+    components: [{ type: 10, content: '**' + title + '**\n' + description }],
+    accessory: button(action, label, style),
+  });
+  return [{
+    type: 17,
+    accent_color: 0x5865F2,
+    components: [
+      { type: 10, content: 'Oluşturulabilir özel odalara hoş geldiniz!\nAşağıdaki seçeneklerle geçici odanı yönetebilirsin.\nÖzel oda kanalına katıldığında sistem senin için otomatik bir oda oluşturur.' },
+      section('Oda Bilgisi', 'Odanın sahibi, kullanıcı limiti ve mevcut durumunu görüntüleyebilirsin.', 'info', 'Oda Bilgisi'),
+      section('Kullanıcı Ekle', 'Odanıza belirli kullanıcıları davet ederek erişim sağlayabilirsin.', 'add', 'Kullanıcı Ekle', 3),
+      section('Kullanıcı Kaldır', 'Odanızdan belirli kullanıcıların erişimini kaldırabilirsin.', 'remove', 'Kullanıcı Kaldır', 4),
+      section('Oda Limiti', 'Odada aynı anda bulunabilecek maksimum kullanıcı sayısını ayarlayabilirsin.', 'limit', 'Oda Limiti', 1),
+      section('Odayı Kapat / Odayı Aç', 'Odanı yeni kullanıcıların bağlanmasına engelleyebilir veya kilitlediğin odayı tekrar erişime açabilirsin.', 'lock', 'Odayı Kapat / Aç'),
+      section('Oda İsmi Değiştir', 'Geçici özel odanın ismini değiştirebilirsin.', 'name', 'Oda İsmi Değiştir'),
+      section('Yönetici Ekle', 'Odanıza yardımcı olacak yöneticiler ekleyebilirsin.', 'admin-add', 'Yönetici Ekle'),
+      section('Yönetici Kaldır', 'Oda yöneticilerinden istediğin kişiyi çıkarabilirsin.', 'admin-remove', 'Yönetici Kaldır'),
+    ],
+  }];
+}
+
+function buildRoomManagementPayload(voiceChannelId = null) {
+  return {
+    flags: 32768,
+    embeds: [],
+    components: buildRoomManagementComponents(voiceChannelId),
+    allowedMentions: { parse: [] },
+  };
+}
+
+function isRoomPanelMessage(message) {
+  if (message?.author?.id !== client.user.id) return false;
+  const oldPanel = message.embeds?.some((embed) => [
+    '🎧 Oda Yönetimi',
+    'Özel Oda Sistemi',
+    '# Özel Oda Kontrol Paneli',
+    'Özel Oda Kontrol Paneli',
+  ].includes(embed.title));
+  const v2Panel = message.components?.some((container) =>
+    container.type === 17 && container.components?.some((component) =>
+      component.accessory?.custom_id?.startsWith('room-action:')
+    )
+  );
+  return Boolean(oldPanel || v2Panel);
 }
 
 async function refreshRoomManagementPanel(guild) {
   const panelChannel = guild?.channels.cache.find((channel) =>
-    channel.type === ChannelType.GuildText && ['özel-oda', 'oda-menusu'].includes(channel.name)
+    channel.type === ChannelType.GuildText && ['özel-oda-panel', 'özel-oda', 'oda-menusu'].includes(channel.name)
   );
   if (panelChannel) await ensureRoomManagementPanel(panelChannel, null, null);
 }
 
+function canManageRoom(userId, roomInfo, voiceChannel) {
+  if (!roomInfo || !voiceChannel) return false;
+  if (roomInfo.ownerId === userId) return true;
+  const overwrite = voiceChannel.permissionOverwrites.cache.get(userId);
+  return Boolean(overwrite?.allow.has(PermissionsBitField.Flags.ManageChannels));
+}
+
+function findManagedRoomForUser(guild, userId, explicitRoomChannelId = null) {
+  if (explicitRoomChannelId) return getRoomOwnerMap().get(explicitRoomChannelId) || null;
+  return [...getRoomOwnerMap().values()].find((info) => {
+    if (info.guildId !== guild?.id) return false;
+    const voiceChannel = guild.channels.cache.get(info.channelId);
+    return canManageRoom(userId, info, voiceChannel);
+  }) || null;
+}
+
 async function handleRoomActionButton(interaction) {
   const [, action, explicitRoomChannelId] = interaction.customId.split(':');
-  const roomInfo = explicitRoomChannelId
-    ? getRoomOwnerMap().get(explicitRoomChannelId)
-    : [...getRoomOwnerMap().values()].find((info) => info.guildId === interaction.guild?.id && info.ownerId === interaction.user.id);
+  const roomInfo = findManagedRoomForUser(interaction.guild, interaction.user.id, explicitRoomChannelId);
   const roomChannelId = roomInfo?.channelId || explicitRoomChannelId;
   const voiceChannel = interaction.guild?.channels.cache.get(roomChannelId);
-  if (!interaction.guild || !roomInfo || roomInfo.ownerId !== interaction.user.id) {
-    await interaction.reply({ content: '❌ Önce Özel Oda Oluştur ses kanalına girerek özel odanı oluşturmalısın.', ephemeral: true });
+  if (!interaction.guild || !roomInfo || !canManageRoom(interaction.user.id, roomInfo, voiceChannel)) {
+    await interaction.reply({ content: '❌ Önce Özel Oda Oluştur ses kanalına girerek özel odanı oluşturmalı veya oda yöneticisi olmalısın.', ephemeral: true });
     return;
   }
   if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
     await interaction.reply({ content: '❌ Ses odası artık bulunamıyor.', ephemeral: true });
     return;
   }
-  if (action === 'add' || action === 'remove' || action === 'transfer') {
-    const selectId = action === 'transfer' ? 'room-transfer:' + roomChannelId : 'room-members-' + action + ':' + roomChannelId;
-    const placeholder = action === 'add' ? 'Odaya kullanıcı seç' : action === 'remove' ? 'Odadan çıkarılacak kullanıcıyı seç' : 'Yeni oda sahibini seç';
+  if (action === 'info') {
+    const everyone = voiceChannel.permissionOverwrites.cache.get(interaction.guild.roles.everyone.id);
+    const locked = Boolean(everyone?.deny.has(PermissionsBitField.Flags.Connect));
+    const members = voiceChannel.members.size ? [...voiceChannel.members.values()].map((member) => member.displayName).join(', ') : 'Oda boş';
+    await interaction.reply({ embeds: [new EmbedBuilder().setTitle('Oda Bilgisi').setColor(0x5865F2).addFields(
+      { name: 'Sahip', value: '<@' + roomInfo.ownerId + '>', inline: true },
+      { name: 'Limit', value: String(voiceChannel.userLimit || 'Sınırsız'), inline: true },
+      { name: 'Durum', value: locked ? '🔒 Kapalı' : '🔓 Açık', inline: true },
+      { name: 'Kullanıcılar', value: members.slice(0, 1024) }
+    )], ephemeral: true });
+    return;
+  }
+  if (action === 'add' || action === 'remove' || action === 'admin-add' || action === 'admin-remove' || action === 'transfer') {
+    const isAdminAction = action === 'admin-add' || action === 'admin-remove';
+    const selectId = action === 'transfer' ? 'room-transfer:' + roomChannelId : isAdminAction ? 'room-admin-' + (action === 'admin-add' ? 'add' : 'remove') + ':' + roomChannelId : 'room-members-' + action + ':' + roomChannelId;
+    const placeholder = action === 'add' ? 'Odaya eklenecek kullanıcıyı seç' : action === 'remove' ? 'Odadan çıkarılacak kullanıcıyı seç' : action === 'admin-add' ? 'Yönetici yapılacak kullanıcıyı seç' : action === 'admin-remove' ? 'Yöneticiliği kaldırılacak kullanıcıyı seç' : 'Yeni oda sahibini seç';
     const select = new UserSelectMenuBuilder().setCustomId(selectId).setPlaceholder(placeholder).setMinValues(1).setMaxValues(1);
-    await interaction.reply({ content: action === 'transfer' ? 'Yeni oda sahibini seç.' : action === 'add' ? 'Odaya eklenecek kullanıcıyı seç.' : 'Odadan çıkarılacak kullanıcıyı seç.', components: [new ActionRowBuilder().addComponents(select)], ephemeral: true });
+    await interaction.reply({ content: placeholder + '.', components: [new ActionRowBuilder().addComponents(select)], ephemeral: true });
     return;
   }
   if (action === 'limit') {
@@ -685,7 +732,7 @@ async function handleRoomActionButton(interaction) {
 async function handleRoomLimitModal(interaction, roomChannelId) {
   const roomInfo = getRoomOwnerMap().get(roomChannelId);
   const room = interaction.guild?.channels.cache.get(roomChannelId);
-  if (!roomInfo || roomInfo.ownerId !== interaction.user.id || !room || room.type !== ChannelType.GuildVoice) return interaction.reply({ content: '❌ Bu işlem için oda sahibi olmalısın.', ephemeral: true });
+  if (!roomInfo || !canManageRoom(interaction.user.id, roomInfo, room) || !room || room.type !== ChannelType.GuildVoice) return interaction.reply({ content: '❌ Bu işlem için oda sahibi olmalısın.', ephemeral: true });
   const limit = Number.parseInt(interaction.fields.getTextInputValue('room-limit-input').trim(), 10);
   if (!Number.isInteger(limit) || limit < 0 || limit > 99) return interaction.reply({ content: '❌ Limit 0 ile 99 arasında olmalı.', ephemeral: true });
   try {
@@ -701,7 +748,7 @@ async function handleRoomLimitModal(interaction, roomChannelId) {
 async function handleRoomNameModal(interaction, roomChannelId) {
   const roomInfo = getRoomOwnerMap().get(roomChannelId);
   const room = interaction.guild?.channels.cache.get(roomChannelId);
-  if (!roomInfo || roomInfo.ownerId !== interaction.user.id || !room || room.type !== ChannelType.GuildVoice) return interaction.reply({ content: '❌ Bu işlem için oda sahibi olmalısın.', ephemeral: true });
+  if (!roomInfo || !canManageRoom(interaction.user.id, roomInfo, room) || !room || room.type !== ChannelType.GuildVoice) return interaction.reply({ content: '❌ Bu işlem için oda sahibi olmalısın.', ephemeral: true });
   const name = interaction.fields.getTextInputValue('room-name-input').trim();
   if (name.length < 2 || name.length > 50 || /[\r\n]/.test(name)) return interaction.reply({ content: '❌ Oda ismi 2-50 karakter arasında olmalı.', ephemeral: true });
   await room.setName(name + ' · ' + interaction.user.username);
@@ -713,21 +760,9 @@ async function handleRoomNameModal(interaction, roomChannelId) {
 
 async function ensureRoomManagementPanel(controlChannel, voiceChannel, roomInfo) {
   if (!controlChannel || controlChannel.type !== ChannelType.GuildText) return;
-
   const messages = await controlChannel.messages.fetch({ limit: 50 }).catch(() => null);
-  const existingMessage = messages?.find((message) =>
-    message.author.id === client.user.id && [
-      '🎧 Oda Yönetimi',
-      'Özel Oda Sistemi',
-    '# Özel Oda Kontrol Paneli',
-    'Özel Oda Kontrol Paneli',
-      ].includes(message.embeds[0]?.title)
-  );
-  const payload = {
-    embeds: [buildRoomManagementEmbed(roomInfo, voiceChannel)],
-    components: buildRoomManagementComponents(voiceChannel?.id || null, voiceChannel),
-  };
-
+  const existingMessage = messages?.find(isRoomPanelMessage);
+  const payload = buildRoomManagementPayload(voiceChannel?.id || null);
   if (existingMessage) await existingMessage.edit(payload);
   else await controlChannel.send(payload);
 }
@@ -1007,7 +1042,7 @@ async function handleRoomCommand(message) {
   }
 
   await ensureRoomMenu(message.guild);
-  await message.reply({ content: '🎧 Özel oda kontrol paneli `#özel-oda` kanalında hazır!' });
+  await message.reply({ content: '🎧 Özel oda kontrol paneli `#özel-oda-panel` kanalında hazır!' });
 }
 
 async function handleRoleAddCommand(message, args) {
@@ -1315,13 +1350,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   }
 
-  if (interaction.isUserSelectMenu() && (interaction.customId.startsWith('room-members-') || interaction.customId.startsWith('room-transfer:'))) {
+  if (interaction.isUserSelectMenu() && (interaction.customId.startsWith('room-members-') || interaction.customId.startsWith('room-transfer:') || interaction.customId.startsWith('room-admin-'))) {
     const parts = interaction.customId.split(':');
     const action = parts[0];
     const roomChannelId = parts[1];
     const roomInfo = getRoomOwnerMap().get(roomChannelId);
 
-    if (!interaction.guild || !roomInfo || roomInfo.ownerId !== interaction.user.id) {
+    if (!interaction.guild || !roomInfo || !canManageRoom(interaction.user.id, roomInfo, interaction.guild.channels.cache.get(roomChannelId))) {
       await interaction.reply({ content: '❌ Bu menüyü yalnızca oda sahibi kullanabilir.', ephemeral: true });
       return;
     }
@@ -1329,6 +1364,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
     const voiceChannel = interaction.guild.channels.cache.get(roomChannelId);
     if (!voiceChannel || voiceChannel.type !== ChannelType.GuildVoice) {
       await interaction.reply({ content: '❌ Ses odası artık bulunamıyor.', ephemeral: true });
+      return;
+    }
+
+    if (action === 'room-admin-add' || action === 'room-admin-remove') {
+      const targetId = interaction.values[0];
+      const target = await interaction.guild.members.fetch(targetId).catch(() => null);
+      if (!target || target.user.bot || target.id === roomInfo.ownerId) {
+        await interaction.reply({ content: '❌ Geçerli bir kullanıcı seçmelisin.', ephemeral: true });
+        return;
+      }
+      const adding = action === 'room-admin-add';
+      await voiceChannel.permissionOverwrites.edit(target.id, {
+        ViewChannel: adding ? true : true,
+        Connect: adding ? true : true,
+        ManageChannels: adding,
+      });
+      await refreshRoomManagementPanel(interaction.guild);
+      await interaction.update({ content: adding ? '✅ Kullanıcı oda yöneticisi yapıldı.' : '✅ Kullanıcının oda yöneticiliği kaldırıldı.', components: [] });
       return;
     }
 
