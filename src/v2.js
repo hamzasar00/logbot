@@ -866,16 +866,9 @@ async function registerCommand(context) {
   return respond(context, { content: (previous ? '✅ Kayıt bilgilerin güncellendi.' : '✅ Kayıt tamamlandı.') + '\nİsim: **' + record.name + '** | Yaş: **' + record.age + '** | Rol: ' + targetRole, ephemeral: true });
 }
 const slashCommands = [
-  { name: 'setup', description: 'Log ve oda sistemini hazırlar' },
-  { name: 'log', description: 'Log kontrol panelini açar' },
   { name: 'oda', description: 'Özel oda menüsünü gösterir' },
   { name: 'roller', description: 'Rol seçim menüsünü gösterir' },
   { name: 'help', description: 'Yardım menüsünü gösterir' },
-  { name: 'boost-kanal', description: 'Boost bildirim kanalını ayarlar', options: [{ name: 'kanal', description: 'Boost kanalı', type: 7, required: true, channel_types: [0] }] },
-  { name: 'boost-gif', description: 'Boost GIF bağlantısını ayarlar', options: [{ name: 'url', description: 'HTTP/HTTPS GIF bağlantısı', type: 3 }, { name: 'gif', description: 'GIF dosyası', type: 11 }, { name: 'kaldir', description: 'Kayıtlı GIF bağlantısını kaldır', type: 5 }] },
-  { name: 'boost-test', description: 'Test boost bildirimi gönderir' },
-  { name: 'boost-baslik', description: 'Boost bildirim başlığını ayarlar', options: [{ name: 'baslik', description: 'Başlık', type: 3, required: true, max_length: 256 }] },
-  { name: 'boost-mesaj', description: 'Boost bildirim mesajını ayarlar', options: [{ name: 'mesaj', description: 'Mesaj', type: 3, required: true, max_length: 4096 }] },
   { name: 'roller-ekle', description: 'Rol menüsüne rol ekler', options: [{ name: 'rol', description: 'Eklenecek rol', type: 8, required: true }, { name: 'kategori', description: 'Rol kategorisi', type: 3, choices: [{ name: 'Etkinlik', value: 'event' }, { name: 'Renk', value: 'color' }, { name: 'Burç', value: 'zodiac' }, { name: 'Oyun', value: 'game' }, { name: 'Takım', value: 'team' }, { name: 'Genel', value: 'general' }] }] },
   { name: 'roller-sil', description: 'Rol menüsünden rol çıkarır', options: [{ name: 'rol', description: 'Çıkarılacak rol', type: 8, required: true }] },
   { name: 'roller-menu', description: 'Rol menüsünü hazırlar' },
