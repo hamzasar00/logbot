@@ -37,7 +37,6 @@ const client = new Client({
   ],
 });
 
-const PREFIX = '.';
 const BOT_VOICE_CHANNEL_NAME = '</>';
 const ROOM_TRIGGER_CHANNEL_NAMES = ['Özel Oda Oluştur', 'Özel Oda için Tıkla!'];
 
@@ -234,7 +233,7 @@ async function getInviteJoinInfo(member) {
 function buildHelpEmbed() {
   return new EmbedBuilder()
     .setTitle('🆘 Detaylı Yardım')
-    .setDescription('Bu bot; register, moderasyon, seviye/XP, leaderboard, rol seçimleri ve özel ses odalarını yönetir. Ana komutlar slash (/) olarak kullanılabilir; eski nokta (.) prefixleri geriye dönük uyumluluk için açıktır.')
+    .setDescription('Bu bot; register, moderasyon, seviye/XP, leaderboard, rol seçimleri ve özel ses odalarını slash komutlarıyla yönetir.')
     .setColor(Colors.Blurple)
     .addFields(
       { name: '🚀 Hızlı Başlangıç', value: '/register ile kayıt ol, /leaderboard kategori:seviye ile sıralamayı gör, /oda ile özel oda menüsünü aç.', inline: false },
@@ -1186,45 +1185,7 @@ client.on(Events.ClientReady, async () => {
     }
   }
 
-  printSuccess('Discord bağlantısı hazır • Prefix: . • Yardım: .help');
-});
-
-client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) {
-    return;
-  }
-
-  const content = message.content.slice(PREFIX.length).trim();
-  const [command, ...args] = content.split(/\s+/);
-
-  if (command === 'oda') {
-    await handleRoomCommand(message);
-    return;
-  }
-
-  if (command === 'roller-ekle' || command === 'rol-ekle') {
-    await handleRoleAddCommand(message, args);
-    return;
-  }
-
-  if (command === 'roller-sil') {
-    await handleRoleRemoveCommand(message, args);
-    return;
-  }
-
-  if (command === 'roller-menu') {
-    await handleRoleMenuCommand(message);
-    return;
-  }
-
-  if (command === 'roller') {
-    await handleRoleCommand(message);
-    return;
-  }
-
-  if (command === 'help' || command === 'yardım' || command === 'yardim') {
-    await handleHelpCommand(message);
-  }
+  printSuccess('Discord bağlantısı hazır • Slash komutları ve butonlar aktif.');
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
