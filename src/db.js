@@ -1,10 +1,7 @@
 const fs = require('fs');
-const path = require('path');
+const { getDataFile } = require('./data-path');
 
-const dataDirectory = path.join(__dirname, '..', 'data');
-const dataFile = path.join(dataDirectory, 'bot-data.json');
-
-fs.mkdirSync(dataDirectory, { recursive: true });
+const dataFile = getDataFile('bot-data.json');
 
 const LOG_GROUPS = Object.freeze({
   member: { key: 'member', label: 'Üye Log', channelName: 'uye-log', defaultEnabled: true },
