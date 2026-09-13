@@ -676,7 +676,7 @@ function buildHelpEmbed() {
       },
       {
         name: '📈 İSTATİSTİK & LEADERBOARD',
-        value: '.istatistik durum — İstatistiklerin açık/kapalı durumunu ve kayıtları gösterir.\n.istatistik ac | kapat — Mesaj, katılım, ayrılma, ses ve davet takibini açar/kapatır.\n.istatistik [gün] — Son 1-30 günün raporunu gösterir.\n\n.leaderboard metin|ses|davet [limit] — En fazla 10 kişilik sıralama gösterir.\n.leaderboard kur #kanal — Sabit leaderboard panelini kurar ve otomatik yenilemeyi açar.\n.leaderboard yenile — Paneli hemen yeniler.\n.leaderboard kapat — Otomatik yenilemeyi kapatır; panel silinmez.',
+        value: '.istatistik durum — İstatistiklerin açık/kapalı durumunu ve kayıtları gösterir.\n.istatistik ac | kapat — Mesaj, katılım, ayrılma, ses ve davet takibini açar/kapatır.\n.istatistik [gün] — Son 1-30 günün raporunu gösterir.\n\n.leaderboard metin|ses|davet|seviye [limit] — En fazla 10 kişilik sıralama gösterir; seviye seçeneği XP ve seviye ilerlemesini gösterir.\n.leaderboard kur #kanal — Sabit leaderboard panelini kurar ve otomatik yenilemeyi açar.\n.leaderboard yenile — Paneli hemen yeniler.\n.leaderboard kapat — Otomatik yenilemeyi kapatır; panel silinmez.',
         inline: false,
       },
       {
