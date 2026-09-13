@@ -312,6 +312,15 @@ async function handleRoleSelect(interaction) {
   await interaction.reply({ content, ephemeral: true });
 }
 
+function buildRoomMenuEmbed() {
+  return new EmbedBuilder()
+    .setTitle('🎧 Özel Oda Oluşturma')
+    .setDescription('Özel odanı oluşturmak için butona basabilir veya aşağıdaki ses kanalına girebilirsin.')
+    .setColor(0x2B2D31)
+    .addFields({ name: '🔊 Otomatik Oluşturma', value: '`Özel Oda için Tıkla!` ses kanalına girince oda otomatik açılır.', inline: false })
+    .setFooter({ text: 'Oda boş kalınca otomatik silinir.' });
+}
+
 function buildRoomMenuComponents() {
   return [
     new ActionRowBuilder().addComponents(
@@ -324,58 +333,49 @@ function buildRoomMenuComponents() {
 }
 
 async function ensureRoomMenuInternal(guild) {
-  if (!guild) {
-    return;
-  }
+  if (!guild) return;
 
-  const roomCategoryName = 'ÖZEL ODA LAR';
+  const roomCategoryName = 'Özel Oda';
   let roomCategory = null;
   const savedRoomCategoryId = getCategoryId(guild.id, 'room');
   const savedRoomCategory = savedRoomCategoryId ? guild.channels.cache.get(savedRoomCategoryId) : null;
-
-  if (savedRoomCategory?.type === ChannelType.GuildCategory) {
-    roomCategory = savedRoomCategory;
-  }
-
+  if (savedRoomCategory?.type === ChannelType.GuildCategory) roomCategory = savedRoomCategory;
   if (!roomCategory) {
-    roomCategory = guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildCategory && channel.name === roomCategoryName
-    );
+    roomCategory = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && channel.name === roomCategoryName) || null;
   }
-
-  if (roomCategory) {
-    saveCategoryId(guild.id, 'room', roomCategory.id);
+  if (!roomCategory) {
+    roomCategory = await guild.channels.create({ name: roomCategoryName, type: ChannelType.GuildCategory, reason: 'Özel oda kategorisi oluşturuluyor.' });
   }
+  saveCategoryId(guild.id, 'room', roomCategory.id);
 
-  const savedMainCategoryId = getMainCategoryId(guild.id);
-  const mainCategory = savedMainCategoryId ? guild.channels.cache.get(savedMainCategoryId) : guild.channels.cache.find(
-    (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'LOGLAR'
-  );
-  const parentCategory = roomCategory || (mainCategory?.type === ChannelType.GuildCategory ? mainCategory : null);
-
-  // Var olan oda-menusu nerede olursa olsun tekrar oluşturma; yoksa mevcut ana kategoriye koy.
-  let roomChannel = guild.channels.cache.find(
-    (channel) => channel.type === ChannelType.GuildText && channel.name === 'oda-menusu'
-  );
-
+  let roomChannel = guild.channels.cache.find((channel) =>
+    channel.type === ChannelType.GuildText && ['özel-oda', 'oda-menusu'].includes(channel.name)
+  ) || null;
   if (!roomChannel) {
-    const channelOptions = {
-      name: 'oda-menusu',
-      type: ChannelType.GuildText,
-      reason: 'Özel oda oluşturma menüsü oluşturuluyor.',
-    };
-    if (parentCategory) {
-      channelOptions.parent = parentCategory.id;
-    }
-    roomChannel = await guild.channels.create(channelOptions);
+    roomChannel = await guild.channels.create({ name: 'özel-oda', type: ChannelType.GuildText, parent: roomCategory.id, reason: 'Özel oda oluşturma kanalı oluşturuluyor.' });
+  } else if (roomChannel.parentId !== roomCategory.id) {
+    await roomChannel.setParent(roomCategory.id).catch(() => null);
+  }
+
+  let triggerChannel = guild.channels.cache.find((channel) =>
+    channel.type === ChannelType.GuildVoice && channel.name === 'Özel Oda için Tıkla!' && channel.parentId === roomCategory.id
+  ) || null;
+  if (!triggerChannel) {
+    triggerChannel = await guild.channels.create({
+      name: 'Özel Oda için Tıkla!',
+      type: ChannelType.GuildVoice,
+      parent: roomCategory.id,
+      reason: 'Özel oda giriş kanalı oluşturuluyor.',
+    });
   }
 
   const messages = await roomChannel.messages.fetch({ limit: 50 }).catch(() => null);
   const existingMessage = messages?.find((message) => message.author.id === client.user.id && message.embeds[0]?.title === '🎧 Özel Oda Oluşturma');
+  const payload = { embeds: [buildRoomMenuEmbed()], components: buildRoomMenuComponents() };
+  if (existingMessage) await existingMessage.edit(payload);
+  else await roomChannel.send(payload);
 
-  if (!existingMessage) {
-    await roomChannel.send({ embeds: [buildRoomMenuEmbed()], components: buildRoomMenuComponents() });
-  }
+  return { roomCategory, roomChannel, triggerChannel };
 }
 
 async function ensureRoomMenu(guild) {
@@ -796,74 +796,70 @@ async function handleRoomCreateButton(interaction) {
   await interaction.showModal(modal);
 }
 
+async function createPrivateRoom(guild, member, requestedName = 'Özel Oda', userLimit = 0) {
+  const roomOwnerMap = getRoomOwnerMap();
+  const existingRoom = guild.channels.cache.find((channel) => getPrivateRoomOwnerId(channel) === member.user.id);
+  if (existingRoom) {
+    const existingInfo = roomOwnerMap.get(existingRoom.id) || { ownerId: member.user.id, channelId: existingRoom.id, guildId: guild.id, roomName: existingRoom.name, controlChannelId: null };
+    roomOwnerMap.set(existingRoom.id, existingInfo);
+    const existingControl = await ensureRoomControlChannel(guild, existingInfo);
+    return { room: existingRoom, controlChannel: existingControl, existing: true };
+  }
+
+  await ensureRoomMenu(guild);
+  const savedRoomCategoryId = getCategoryId(guild.id, 'room');
+  const savedRoomCategory = savedRoomCategoryId ? guild.channels.cache.get(savedRoomCategoryId) : null;
+  const roomCategory = savedRoomCategory?.type === ChannelType.GuildCategory ? savedRoomCategory : null;
+  const safeName = String(requestedName || 'Özel Oda').trim().slice(0, 50) || 'Özel Oda';
+  const safeLimit = Number.isInteger(userLimit) && userLimit >= 0 && userLimit <= 99 ? userLimit : 0;
+  const roomOptions = {
+    name: safeName,
+    type: ChannelType.GuildVoice,
+    userLimit: safeLimit,
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.Connect] },
+      { id: member.user.id, allow: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel] },
+    ],
+    reason: member.user.tag + ' özel ses odası oluşturdu.',
+  };
+  if (roomCategory) roomOptions.parent = roomCategory.id;
+  const room = await guild.channels.create(roomOptions);
+  await room.setName(safeName + ' · ' + member.user.username).catch(() => null);
+  const roomInfo = { ownerId: member.user.id, channelId: room.id, guildId: guild.id, roomName: safeName, controlChannelId: null };
+  roomOwnerMap.set(room.id, roomInfo);
+  const controlChannel = await ensureRoomControlChannel(guild, roomInfo);
+  return { room, controlChannel, existing: false };
+}
+
 async function handleRoomCreateModal(interaction) {
   const roomName = interaction.fields.getTextInputValue('room-name').trim();
   const rawLimit = interaction.fields.getTextInputValue('room-limit').trim();
   const userLimit = Number.parseInt(rawLimit, 10);
-
-  const finalName = roomName || 'Özel Oda';
-  const safeLimit = Number.isInteger(userLimit) && userLimit > 0 && userLimit <= 99 ? userLimit : 0;
-
   try {
-    const roomOwnerMap = getRoomOwnerMap();
-    const existingRoom = interaction.guild.channels.cache.find((channel) => getPrivateRoomOwnerId(channel) === interaction.user.id);
-    if (existingRoom) {
-      roomOwnerMap.set(existingRoom.id, { ownerId: interaction.user.id, channelId: existingRoom.id, guildId: interaction.guild.id, roomName: existingRoom.name });
-      await interaction.reply({ content: `🎧 Zaten açık bir odan var: ${existingRoom}`, ephemeral: true });
+    const result = await createPrivateRoom(interaction.guild, interaction.member, roomName, Number.isInteger(userLimit) ? userLimit : 0);
+    if (result.existing) {
+      await interaction.reply({ content: '🎧 Zaten açık bir odan var: ' + result.room, ephemeral: true });
       return;
     }
-
-    const savedRoomCategoryId = getCategoryId(interaction.guild.id, 'room');
-    const savedRoomCategory = savedRoomCategoryId ? interaction.guild.channels.cache.get(savedRoomCategoryId) : null;
-    let roomCategory = savedRoomCategory?.type === ChannelType.GuildCategory ? savedRoomCategory : interaction.guild.channels.cache.find(
-      (channel) => channel.type === ChannelType.GuildCategory && channel.name === 'ÖZEL ODA LAR'
-    );
-
-    if (!roomCategory) {
-      const roomMenu = interaction.guild.channels.cache.find(
-        (channel) => channel.type === ChannelType.GuildText && channel.name === 'oda-menusu'
-      );
-      const menuParent = roomMenu?.parent;
-      if (menuParent?.type === ChannelType.GuildCategory) {
-        roomCategory = menuParent;
-      }
-    }
-
-    if (roomCategory) {
-      saveCategoryId(interaction.guild.id, 'room', roomCategory.id);
-    }
-
-    const roomOptions = {
-      name: finalName,
-      type: ChannelType.GuildVoice,
-      userLimit: safeLimit,
-      permissionOverwrites: [
-        {
-          id: interaction.guild.roles.everyone.id,
-          deny: [PermissionsBitField.Flags.Connect],
-        },
-        {
-          id: interaction.user.id,
-          allow: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.ViewChannel],
-        },
-      ],
-      reason: `${interaction.user.tag} özel ses odası oluşturdu.`,
-    };
-
-    if (roomCategory) {
-      roomOptions.parent = roomCategory.id;
-    }
-
-    const room = await interaction.guild.channels.create(roomOptions);
-    await room.setName(finalName + ' · ' + interaction.user.username);
-    const roomInfo = { ownerId: interaction.user.id, channelId: room.id, guildId: interaction.guild.id, roomName: finalName, controlChannelId: null };
-    roomOwnerMap.set(room.id, roomInfo);
-    const controlChannel = await ensureRoomControlChannel(interaction.guild, roomInfo);
-
-    await interaction.reply({ content: '🎧 Oda hazır: ' + room + (controlChannel ? '\n🛠️ Yönetim sohbeti: ' + controlChannel : ''), ephemeral: true });
+    await interaction.reply({ content: '🎧 Oda hazır: ' + result.room + (result.controlChannel ? '\n🛠️ Yönetim sohbeti: ' + result.controlChannel : ''), ephemeral: true });
   } catch (error) {
     console.error('Oda oluşturma hatası:', error);
     await interaction.reply({ content: '⚠️ Oda oluşturulurken bir hata oluştu.', ephemeral: true });
+  }
+}
+
+async function ensurePrivateRoomForTrigger(oldState, newState) {
+  if (!newState.guild || !newState.channelId || oldState.channelId === newState.channelId || newState.member?.user?.bot) return;
+  const categoryId = getCategoryId(newState.guild.id, 'room');
+  const trigger = newState.guild.channels.cache.get(newState.channelId);
+  if (!trigger || trigger.type !== ChannelType.GuildVoice || trigger.name !== 'Özel Oda için Tıkla!' || (categoryId && trigger.parentId !== categoryId)) return;
+  const member = newState.member || await newState.guild.members.fetch(newState.id).catch(() => null);
+  if (!member) return;
+  try {
+    const result = await createPrivateRoom(newState.guild, member);
+    if (result?.room && member.voice.channelId === trigger.id) await member.voice.setChannel(result.room).catch(() => null);
+  } catch (error) {
+    console.error('Otomatik özel oda oluşturma hatası:', error.message);
   }
 }
 
@@ -1400,6 +1396,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   if (!newState.guild) return;
+  await ensurePrivateRoomForTrigger(oldState, newState);
   await checkPrivateRoomAutoClose(oldState, newState);
 });
 
