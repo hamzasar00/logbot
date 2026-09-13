@@ -39,6 +39,7 @@ const client = new Client({
 
 const PREFIX = '.';
 const BOT_VOICE_CHANNEL_NAME = '</>';
+const ROOM_TRIGGER_CHANNEL_NAMES = ['Özel Oda Oluştur', 'Özel Oda için Tıkla!'];
 
 const ROLE_MENU_GROUPS = Object.freeze([
   { id: 'event', emoji: '🎉', label: 'Etkinlik Rolleri Seç' },
@@ -428,15 +429,22 @@ async function ensureRoomMenuInternal(guild) {
   }
 
   let triggerChannel = guild.channels.cache.find((channel) =>
-    channel.type === ChannelType.GuildVoice && channel.name === 'Özel Oda için Tıkla!' && channel.parentId === roomCategory.id
+    channel.type === ChannelType.GuildVoice && ROOM_TRIGGER_CHANNEL_NAMES.includes(channel.name) && channel.parentId === roomCategory.id
   ) || null;
   if (!triggerChannel) {
     triggerChannel = await guild.channels.create({
-      name: 'Özel Oda için Tıkla!',
+      name: 'Özel Oda Oluştur',
       type: ChannelType.GuildVoice,
       parent: roomCategory.id,
       reason: 'Özel oda giriş kanalı oluşturuluyor.',
     });
+  }
+  if (botMember) {
+    await triggerChannel.permissionOverwrites.edit(botMember.id, {
+      ViewChannel: true,
+      Connect: true,
+      MoveMembers: true,
+    }).catch((error) => printError('Özel oda giriş kanalı izinleri ayarlanamadı', error));
   }
 
   const messages = await roomChannel.messages.fetch({ limit: 50 }).catch(() => null);
@@ -587,9 +595,10 @@ function getRoomControlChannel(guild, roomInfo) {
 
 function buildRoomManagementEmbed() {
   return new EmbedBuilder()
-    .setTitle('# MOREA Özel Oda Kontrol Paneli')
+    .setTitle('# Özel Oda Kontrol Paneli')
     .setDescription('Özel odanı aşağıdaki seçeneklerle yönetebilirsin.')
     .setColor(0x2B2D31)
+    .setImage('https://raw.githubusercontent.com/hamzasar00/logbot/v4-clean/assets/morea-banner.png')
     .addFields(
       { name: '➕ ### Üye Ekle', value: 'Özel odana istediğin kullanıcıyı ekler.', inline: false },
       { name: '➖ ### Üye Çıkar', value: 'Kullanıcının özel odana giriş iznini kaldırır.', inline: false },
@@ -597,7 +606,7 @@ function buildRoomManagementEmbed() {
       { name: '🔒 ### Kilitle / Aç', value: 'Özel odanı kilitler veya yeniden açar.', inline: false },
       { name: '🔄 ### Oda İsmi', value: 'Özel odanın ismini istediğin gibi değiştirir.', inline: false }
     )
-    .setFooter({ text: 'Önce 🔊 Özel Oda Oluştur ses kanalına girerek özel odanı oluştur.' });
+    .setFooter({ text: '» Önce 🔊 Özel Oda Oluştur ses kanalına girerek özel odanı oluştur.' });
 }
 
 function buildRoomManagementComponents(voiceChannelId = null) {
@@ -903,6 +912,13 @@ async function createPrivateRoom(guild, member, requestedName = 'Özel Oda', use
     reason: member.user.tag + ' özel ses odası oluşturdu.',
   };
   if (roomCategory) roomOptions.parent = roomCategory.id;
+  const botMember = guild.members.me || await guild.members.fetch(client.user.id).catch(() => null);
+  if (botMember) {
+    roomOptions.permissionOverwrites.push({
+      id: botMember.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.MoveMembers],
+    });
+  }
   const room = await guild.channels.create(roomOptions);
   await room.setName(safeName + ' · ' + member.user.username).catch(() => null);
   const roomInfo = { ownerId: member.user.id, channelId: room.id, guildId: guild.id, roomName: safeName, controlChannelId: null };
@@ -931,12 +947,21 @@ async function ensurePrivateRoomForTrigger(oldState, newState) {
   if (!newState.guild || !newState.channelId || oldState.channelId === newState.channelId || newState.member?.user?.bot) return;
   const categoryId = getCategoryId(newState.guild.id, 'room');
   const trigger = newState.guild.channels.cache.get(newState.channelId);
-  if (!trigger || trigger.type !== ChannelType.GuildVoice || trigger.name !== 'Özel Oda için Tıkla!' || (categoryId && trigger.parentId !== categoryId)) return;
+  if (!trigger || trigger.type !== ChannelType.GuildVoice || !ROOM_TRIGGER_CHANNEL_NAMES.includes(trigger.name) || (categoryId && trigger.parentId !== categoryId)) return;
   const member = newState.member || await newState.guild.members.fetch(newState.id).catch(() => null);
   if (!member) return;
   try {
     const result = await createPrivateRoom(newState.guild, member);
-    if (result?.room && member.voice.channelId === trigger.id) await member.voice.setChannel(result.room).catch(() => null);
+    if (result?.room && member.voice.channelId === trigger.id) {
+      const botMember = newState.guild.members.me || await newState.guild.members.fetch(client.user.id).catch(() => null);
+      if (!botMember?.permissionsIn(result.room).has(PermissionsBitField.Flags.MoveMembers)) {
+        printError('Kullanıcıyı özel odaya taşımak için botta Üyeleri Taşı izni yok.');
+        return;
+      }
+      await member.voice.setChannel(result.room, 'Özel oda otomatik oluşturuldu.').catch((error) => {
+        printError('Kullanıcı özel odaya taşınamadı: ' + error.message);
+      });
+    }
   } catch (error) {
     console.error('Otomatik özel oda oluşturma hatası:', error.message);
   }
