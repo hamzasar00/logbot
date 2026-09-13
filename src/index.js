@@ -458,6 +458,7 @@ async function ensureRoomMenuInternal(guild) {
     '🎧 Özel Oda Oluşturma',
     'Özel Oda Sistemi',
     '# Özel Oda Kontrol Paneli',
+    'Özel Oda Kontrol Paneli',
   ].includes(message.embeds[0]?.title));
   const payload = { embeds: [buildRoomManagementEmbed()], components: buildRoomManagementComponents() };
   if (existingMessage) await existingMessage.edit(payload);
@@ -601,15 +602,15 @@ function getRoomControlChannel(guild, roomInfo) {
 
 function buildRoomManagementEmbed() {
   return new EmbedBuilder()
-    .setTitle('# Özel Oda Kontrol Paneli')
+    .setTitle('Özel Oda Kontrol Paneli')
     .setDescription('Özel odanı aşağıdaki seçeneklerle yönetebilirsin.')
     .setColor(0x2B2D31)
     .addFields(
-      { name: '➕ ### Üye Ekle', value: 'Özel odana istediğin kullanıcıyı ekler.', inline: false },
-      { name: '➖ ### Üye Çıkar', value: 'Kullanıcının özel odana giriş iznini kaldırır.', inline: false },
-      { name: '# ### Oda Limiti', value: 'Özel odanın kişi sınırını değiştirir.', inline: false },
-      { name: '🔒 ### Kilitle / Aç', value: 'Özel odanı kilitler veya yeniden açar.', inline: false },
-      { name: '🔄 ### Oda İsmi', value: 'Özel odanın ismini istediğin gibi değiştirir.', inline: false }
+      { name: '➕ Üye Ekle', value: 'Özel odana istediğin kullanıcıyı ekler.', inline: false },
+      { name: '➖ Üye Çıkar', value: 'Kullanıcının özel odana giriş iznini kaldırır.', inline: false },
+      { name: '🔢 Oda Limiti', value: 'Özel odanın kişi sınırını değiştirir.', inline: false },
+      { name: '🔒 Kilitle / Aç', value: 'Özel odanı kilitler veya yeniden açar.', inline: false },
+      { name: '🔄 Oda İsmi', value: 'Özel odanın ismini istediğin gibi değiştirir.', inline: false }
     )
     .setFooter({ text: '» Önce 🔊 Özel Oda Oluştur ses kanalına girerek özel odanı oluştur.' });
 }
@@ -719,6 +720,7 @@ async function ensureRoomManagementPanel(controlChannel, voiceChannel, roomInfo)
       '🎧 Oda Yönetimi',
       'Özel Oda Sistemi',
     '# Özel Oda Kontrol Paneli',
+    'Özel Oda Kontrol Paneli',
       ].includes(message.embeds[0]?.title)
   );
   const payload = {
