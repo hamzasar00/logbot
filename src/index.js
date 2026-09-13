@@ -173,7 +173,7 @@ function buildHelpEmbed() {
       { name: '📝 Register', value: '/register isim yaş cinsiyet ve /register-roller komutlarını kullan.', inline: false },
       { name: '🛡️ Moderasyon', value: '/uyar, /uyarilar, /uyarisil, /filtre ve /hosgeldin komutları kullanılabilir.', inline: false },
       { name: '📊 Seviye ve Leaderboard', value: '/seviye, /seviye-siralama, /leaderboard ve /leaderboard-panel komutları kullanılabilir.', inline: false },
-      { name: '🎧 Özel Ses Odası', value: '/oda, /oda-devret, /oda-kilitle ve /oda-limit komutları kullanılabilir.', inline: false },
+      { name: '🎧 Özel Ses Odası', value: '/oda, /oda-kategori, /oda-devret, /oda-kilitle ve /oda-limit komutları kullanılabilir.', inline: false },
       { name: '🎭 Roller', value: '/roller, /roller-menu, /roller-ekle ve /roller-sil komutları kullanılabilir.', inline: false },
       { name: '🎲 Diğer', value: '/blackjack, /bakiye ve /gunluk komutları kullanılabilir.', inline: false },
     );
@@ -1330,6 +1330,15 @@ async function handleRoleRemoveSlashCommand(interaction) {
   return handleRoleRemoveCommand(slashMessageAdapter(interaction, { role }));
 }
 async function handleRoomSlashCommand(interaction) { return handleRoomCommand(slashMessageAdapter(interaction)); }
+async function handleRoomCategorySlashCommand(interaction) {
+  if (!interaction.guild) return interaction.reply({ content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  const canManage = interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageChannels) || interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild);
+  if (!canManage) return interaction.reply({ content: '❌ Bu komut için Kanalları Yönet veya Sunucuyu Yönet izni gerekir.', ephemeral: true });
+  const category = interaction.options.getChannel('kategori');
+  if (!category || category.type !== ChannelType.GuildCategory) return interaction.reply({ content: '❌ Geçerli bir kategori seçmelisin.', ephemeral: true });
+  saveCategoryId(interaction.guild.id, 'room', category.id);
+  return interaction.reply({ content: '✅ Özel ses odalarının kategorisi ' + category + ' olarak ayarlandı.' });
+}
 async function handleRoleSlashCommand(interaction) { return handleRoleCommand(slashMessageAdapter(interaction)); }
 async function handleRoleMenuSlashCommand(interaction) { return handleRoleMenuCommand(slashMessageAdapter(interaction)); }
 async function handleHelpSlashCommand(interaction) { return handleHelpCommand(slashMessageAdapter(interaction)); }
@@ -1340,6 +1349,7 @@ require('./v2').initializeV3({
   sendLog: async () => {},
   commandHandlers: {
     oda: handleRoomSlashCommand,
+    'oda-kategori': handleRoomCategorySlashCommand,
     roller: handleRoleSlashCommand,
     help: handleHelpSlashCommand,
     'roller-ekle': handleRoleAddSlashCommand,
