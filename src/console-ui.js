@@ -24,8 +24,8 @@ function printBanner(client) {
   console.log(paint('cyan', '╠════════════════════════════════════════════════════════════╣'));
   console.log(paint('cyan', '║') + '  ' + paint('green', '●') + '  Bot       : ' + botName);
   console.log(paint('cyan', '║') + '  ' + paint('blue', '◆') + '  Sunucular : ' + serverCount);
-  console.log(paint('cyan', '║') + '  ' + paint('yellow', '◆') + '  Prefix    : .');
-  console.log(paint('cyan', '║') + '  ' + paint('gray', '◆') + '  Yardım    : .help');
+  console.log(paint('cyan', '║') + '  ' + paint('yellow', '◆') + '  Komutlar  : Slash (/)' );
+  console.log(paint('cyan', '║') + '  ' + paint('gray', '◆') + '  Yardım    : /help');
   console.log(paint('cyan', '╚════════════════════════════════════════════════════════════╝'));
 }
 
