@@ -455,7 +455,9 @@ async function ensureRoomMenuInternal(guild) {
   }
 
   const messages = await roomChannel.messages.fetch({ limit: 50 }).catch(() => null);
-  const existingMessage = messages?.find(isRoomPanelMessage);
+  const panelMessages = messages ? [...messages.values()].filter(isRoomPanelMessage).sort((a, b) => b.createdTimestamp - a.createdTimestamp) : [];
+  const existingMessage = panelMessages[0];
+  for (const duplicate of panelMessages.slice(1)) await duplicate.delete().catch(() => null);
   const payload = buildRoomManagementPayload();
   if (existingMessage) await existingMessage.edit(payload);
   else await roomChannel.send(payload);
@@ -645,7 +647,7 @@ function isRoomPanelMessage(message) {
   ].includes(embed.title));
   const v2Panel = message.components?.some((container) =>
     container.type === 17 && container.components?.some((component) =>
-      component.accessory?.custom_id?.startsWith('room-action:')
+      (component.accessory?.custom_id || component.accessory?.customId)?.startsWith('room-action:')
     )
   );
   return Boolean(oldPanel || v2Panel);
@@ -761,7 +763,9 @@ async function handleRoomNameModal(interaction, roomChannelId) {
 async function ensureRoomManagementPanel(controlChannel, voiceChannel, roomInfo) {
   if (!controlChannel || controlChannel.type !== ChannelType.GuildText) return;
   const messages = await controlChannel.messages.fetch({ limit: 50 }).catch(() => null);
-  const existingMessage = messages?.find(isRoomPanelMessage);
+  const panelMessages = messages ? [...messages.values()].filter(isRoomPanelMessage).sort((a, b) => b.createdTimestamp - a.createdTimestamp) : [];
+  const existingMessage = panelMessages[0];
+  for (const duplicate of panelMessages.slice(1)) await duplicate.delete().catch(() => null);
   const payload = buildRoomManagementPayload(voiceChannel?.id || null);
   if (existingMessage) await existingMessage.edit(payload);
   else await controlChannel.send(payload);
@@ -937,7 +941,6 @@ async function createPrivateRoom(guild, member, requestedName = 'Özel Oda', use
     return { room: existingRoom, controlChannel: null, existing: true };
   }
 
-  await ensureRoomMenu(guild);
   const savedRoomCategoryId = getCategoryId(guild.id, 'room');
   const savedRoomCategory = savedRoomCategoryId ? guild.channels.cache.get(savedRoomCategoryId) : null;
   const roomCategory = savedRoomCategory?.type === ChannelType.GuildCategory ? savedRoomCategory : null;
