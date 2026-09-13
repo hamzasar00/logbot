@@ -408,3 +408,11 @@ Yönetici önce kayıt rollerini bağlar:
 - /register isim:... yas:... cinsiyet:Kadın/Erkek
 
 Kayıt tamamlandığında kayıtsız rolü kaldırılır, seçilen cinsiyet rolü verilir ve kayıt bilgisi kalıcı olarak saklanır. Yaş sınırı 13-100 arasındadır.
+
+
+## Geliştirilmiş leaderboard
+
+- `/leaderboard kategori:seviye` veya `.leaderboard seviye` seviye, XP, ilerleme çubuğu ve mesaj sayısına göre sıralar.
+- Sıralama önceliği: seviye > XP > mesaj.
+- Sabit leaderboard paneli aynı ilerleme bilgilerini gösterir ve 60 saniyede bir güncellenir.
+- Seviye değeri artık kayıtlı değerden değil, toplam XP üzerinden yeniden hesaplanır.
