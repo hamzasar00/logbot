@@ -420,7 +420,7 @@ async function ensureRoomMenuInternal(guild) {
     channel.type === ChannelType.GuildText && ['özel-oda-panel', 'özel-oda', 'oda-menusu'].includes(channel.name)
   ) || null;
   if (!roomChannel) {
-    roomChannel = await guild.channels.create({ name: 'özel-oda', type: ChannelType.GuildText, parent: roomCategory.id, reason: 'Özel oda oluşturma kanalı oluşturuluyor.' });
+    roomChannel = await guild.channels.create({ name: 'özel-oda-panel', type: ChannelType.GuildText, parent: roomCategory.id, reason: 'Özel oda oluşturma kanalı oluşturuluyor.' });
   } else {
     if (roomChannel.name !== 'özel-oda-panel') await roomChannel.setName('özel-oda-panel').catch(() => null);
     if (roomChannel.parentId !== roomCategory.id) await roomChannel.setParent(roomCategory.id).catch(() => null);
