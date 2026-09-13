@@ -176,6 +176,7 @@ function normalizeGuild(value) {
     if (!isPlainObject(value)) { delete guild.levels.users[userId]; continue; }
     if (!Number.isFinite(value.xp) || value.xp < 0) value.xp = 0;
     if (!Number.isInteger(value.level) || value.level < 0) value.level = 0;
+    value.level = levelFromXp(value.xp);
     if (!Number.isInteger(value.messages) || value.messages < 0) value.messages = 0;
   }
 
@@ -318,17 +319,23 @@ function addLevelXp(guildId, userId, amount = 0) {
 
 function getLevelUser(guildId, userId) {
   const levels = getGuild(guildId).levels;
-  const user = levels.users[userId] || { xp: 0, level: 0, messages: 0 };
-  return { userId, xp: Number(user.xp) || 0, level: Number(user.level) || 0, messages: Number(user.messages) || 0 };
+  const user = levels.users[userId] || { xp: 0, messages: 0 };
+  const xp = Math.max(0, Number(user.xp) || 0);
+  const level = levelFromXp(xp);
+  return { userId, xp, level, messages: Math.max(0, Number(user.messages) || 0), nextXp: xpForLevel(level + 1) };
 }
 
 function getLevelLeaderboard(guildId, limit = 10) {
   const levels = getGuild(guildId).levels;
   const safeLimit = Math.min(10, Math.max(1, Number.isInteger(limit) ? limit : 10));
   return Object.entries(levels.users)
-    .map(([userId, value]) => ({ userId, xp: Number(value.xp) || 0, level: Number(value.level) || 0, messages: Number(value.messages) || 0 }))
+    .map(([userId, value]) => {
+      const xp = Math.max(0, Number(value.xp) || 0);
+      const level = levelFromXp(xp);
+      return { userId, xp, level, messages: Math.max(0, Number(value.messages) || 0), nextXp: xpForLevel(level + 1) };
+    })
     .filter((entry) => entry.xp > 0)
-    .sort((first, second) => second.xp - first.xp || first.userId.localeCompare(second.userId))
+    .sort((first, second) => second.level - first.level || second.xp - first.xp || second.messages - first.messages || first.userId.localeCompare(second.userId))
     .slice(0, safeLimit);
 }
 
