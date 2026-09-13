@@ -41,6 +41,12 @@ const PREFIX = '.';
 const BOT_VOICE_CHANNEL_NAME = '</>';
 const ROOM_TRIGGER_CHANNEL_NAMES = ['Özel Oda Oluştur', 'Özel Oda için Tıkla!'];
 
+function isRoomTriggerChannel(channel) {
+  if (!channel || channel.type !== ChannelType.GuildVoice) return false;
+  const normalized = channel.name.trim().toLocaleLowerCase('tr-TR');
+  return ROOM_TRIGGER_CHANNEL_NAMES.some((name) => normalized === name.toLocaleLowerCase('tr-TR'));
+}
+
 const ROLE_MENU_GROUPS = Object.freeze([
   { id: 'event', emoji: '🎉', label: 'Etkinlik Rolleri Seç' },
   { id: 'color', emoji: '🎨', label: 'Renk Rolleri Seç' },
@@ -429,7 +435,7 @@ async function ensureRoomMenuInternal(guild) {
   }
 
   let triggerChannel = guild.channels.cache.find((channel) =>
-    channel.type === ChannelType.GuildVoice && ROOM_TRIGGER_CHANNEL_NAMES.includes(channel.name) && channel.parentId === roomCategory.id
+    isRoomTriggerChannel(channel) && channel.parentId === roomCategory.id
   ) || null;
   if (!triggerChannel) {
     triggerChannel = await guild.channels.create({
@@ -451,6 +457,7 @@ async function ensureRoomMenuInternal(guild) {
   const existingMessage = messages?.find((message) => message.author.id === client.user.id && [
     '🎧 Özel Oda Oluşturma',
     'Özel Oda Sistemi',
+    '# Özel Oda Kontrol Paneli',
   ].includes(message.embeds[0]?.title));
   const payload = { embeds: [buildRoomManagementEmbed()], components: buildRoomManagementComponents() };
   if (existingMessage) await existingMessage.edit(payload);
@@ -711,6 +718,7 @@ async function ensureRoomManagementPanel(controlChannel, voiceChannel, roomInfo)
     message.author.id === client.user.id && [
       '🎧 Oda Yönetimi',
       'Özel Oda Sistemi',
+    '# Özel Oda Kontrol Paneli',
       ].includes(message.embeds[0]?.title)
   );
   const payload = {
@@ -944,7 +952,7 @@ async function ensurePrivateRoomForTrigger(oldState, newState) {
   if (!newState.guild || !newState.channelId || oldState.channelId === newState.channelId || newState.member?.user?.bot) return;
   const categoryId = getCategoryId(newState.guild.id, 'room');
   const trigger = newState.guild.channels.cache.get(newState.channelId);
-  if (!trigger || trigger.type !== ChannelType.GuildVoice || !ROOM_TRIGGER_CHANNEL_NAMES.includes(trigger.name) || (categoryId && trigger.parentId !== categoryId)) return;
+  if (!trigger || trigger.type !== ChannelType.GuildVoice || !isRoomTriggerChannel(trigger)) return;
   const member = newState.member || await newState.guild.members.fetch(newState.id).catch(() => null);
   if (!member) return;
   try {
