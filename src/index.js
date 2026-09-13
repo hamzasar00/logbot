@@ -576,7 +576,7 @@ async function handleLogCommand(message) {
 function buildHelpEmbed() {
   return new EmbedBuilder()
     .setTitle('🆘 Detaylı Yardım')
-    .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Aşağıdaki komutlar nokta (.) prefixi ile kullanılır.')
+    .setDescription('Bu bot; sunucu loglarını, boost bildirimlerini, rol seçimlerini ve özel ses odalarını yönetir. Aşağıdaki eski komutlar nokta (.) prefixi ile kullanılır. Kayıt komutları slash (/) olarak kullanılır.')
     .setColor(Colors.Blurple)
     .addFields(
       {
@@ -667,6 +667,11 @@ function buildHelpEmbed() {
       {
         name: '👋 HOŞ GELDİN & AYRILMA',
         value: '.hosgeldin durum — Hoş geldin, ayrılma ve otomatik rol ayarlarını gösterir.\n.hosgeldin ac #kanal [mesaj] — Katılan üyelere mesaj gönderimini açar.\n.hosgeldin kapat — Hoş geldin mesajlarını kapatır.\n.hosgeldin ayril #kanal [mesaj] — Ayrılan üyeler için mesaj açar.\n.hosgeldin ayril-kapat — Ayrılma mesajlarını kapatır.\n.hosgeldin rol @rol — Yeni üyeye otomatik verilecek rolü ayarlar.\n.hosgeldin rol-kapat — Otomatik rolü kaldırır.\n\nMesaj şablonları: {user}, {username}, {server}, {count}.',
+        inline: false,
+      },
+      {
+        name: '📝 KAYIT SİSTEMİ',
+        value: '/register isim yas cinsiyet — Kayıt bilgilerini alır, kayıtsız rolünü kaldırır ve seçilen kadın/erkek rolünü verir.\n/register-roller kayitsiz @rol kadin @rol erkek @rol — Yönetici kayıt rollerini bağlar.',
         inline: false,
       },
       {
