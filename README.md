@@ -395,3 +395,16 @@ Kaynak kodun ana dosyaları:
 ## Lisans
 
 MIT
+
+
+## Slash kayıt sistemi
+
+Yönetici önce kayıt rollerini bağlar:
+
+- /register-roller kayitsiz:@Kayıtsız kadin:@Kadın erkek:@Erkek
+
+Üyeler daha sonra kayıt olur:
+
+- /register isim:... yas:... cinsiyet:Kadın/Erkek
+
+Kayıt tamamlandığında kayıtsız rolü kaldırılır, seçilen cinsiyet rolü verilir ve kayıt bilgisi kalıcı olarak saklanır. Yaş sınırı 13-100 arasındadır.
