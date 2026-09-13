@@ -1530,6 +1530,16 @@ client.on('invalidated', () => {
   console.error('Discord oturumu geçersiz hale geldi. Botu yeniden başlatın.');
 });
 
+function slashReply(interaction, payload) {
+  const safePayload = typeof payload === 'string' ? { content: payload } : { ...payload };
+  if (interaction.deferred) {
+    delete safePayload.ephemeral;
+    return interaction.editReply(safePayload);
+  }
+  if (interaction.replied) return interaction.followUp(safePayload);
+  return interaction.reply(safePayload);
+}
+
 function slashMessageAdapter(interaction, { channel = null, role = null, attachment = null, args = [] } = {}) {
   return {
     guild: interaction.guild,
@@ -1540,7 +1550,7 @@ function slashMessageAdapter(interaction, { channel = null, role = null, attachm
     args,
     mentions: { channels: { first: () => channel }, roles: { first: () => role } },
     attachments: { first: () => attachment },
-    reply: (payload) => interaction.reply(typeof payload === 'string' ? { content: payload } : payload),
+    reply: (payload) => slashReply(interaction, payload),
   };
 }
 
@@ -1555,13 +1565,13 @@ async function handleRoleRemoveSlashCommand(interaction) {
 }
 async function handleRoomSlashCommand(interaction) { return handleRoomCommand(slashMessageAdapter(interaction)); }
 async function handleRoomCategorySlashCommand(interaction) {
-  if (!interaction.guild) return interaction.reply({ content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  if (!interaction.guild) return slashReply(interaction, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
   const canManage = interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageChannels) || interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild);
-  if (!canManage) return interaction.reply({ content: '❌ Bu komut için Kanalları Yönet veya Sunucuyu Yönet izni gerekir.', ephemeral: true });
+  if (!canManage) return slashReply(interaction, { content: '❌ Bu komut için Kanalları Yönet veya Sunucuyu Yönet izni gerekir.', ephemeral: true });
   const category = interaction.options.getChannel('kategori');
-  if (!category || category.type !== ChannelType.GuildCategory) return interaction.reply({ content: '❌ Geçerli bir kategori seçmelisin.', ephemeral: true });
+  if (!category || category.type !== ChannelType.GuildCategory) return slashReply(interaction, { content: '❌ Geçerli bir kategori seçmelisin.', ephemeral: true });
   saveCategoryId(interaction.guild.id, 'room', category.id);
-  return interaction.reply({ content: '✅ Özel ses odalarının kategorisi ' + category + ' olarak ayarlandı.' });
+  return slashReply(interaction, { content: '✅ Özel ses odalarının kategorisi ' + category + ' olarak ayarlandı.' });
 }
 async function handleRoleSlashCommand(interaction) { return handleRoleCommand(slashMessageAdapter(interaction)); }
 async function handleRoleMenuSlashCommand(interaction) { return handleRoleMenuCommand(slashMessageAdapter(interaction)); }
