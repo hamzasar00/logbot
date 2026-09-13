@@ -1,10 +1,7 @@
 const fs = require('fs');
-const path = require('path');
+const { getDataFile } = require('./data-path');
 
-const dataDirectory = path.join(__dirname, '..', 'data');
-const dataFile = path.join(dataDirectory, 'v2-data.json');
-
-fs.mkdirSync(dataDirectory, { recursive: true });
+const dataFile = getDataFile('v2-data.json');
 
 function createGuildDefaults() {
   return {
