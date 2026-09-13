@@ -1,4 +1,5 @@
 const { Client, GatewayIntentBits, ChannelType, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Colors, REST, Routes, ChannelSelectMenuBuilder, UserSelectMenuBuilder, StringSelectMenuBuilder, AuditLogEvent, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionsBitField } = require('discord.js');
+const { joinVoiceChannel, entersState, VoiceConnectionStatus, getVoiceConnection } = require('@discordjs/voice');
 const { config } = require('dotenv');
 config();
 const { printBanner, printSuccess, printError } = require('./console-ui');
@@ -37,6 +38,7 @@ const client = new Client({
 });
 
 const PREFIX = '.';
+const BOT_VOICE_CHANNEL_NAME = '</>';
 
 const ROLE_MENU_GROUPS = Object.freeze([
   { id: 'event', emoji: '🎉', label: 'Etkinlik Rolleri Seç' },
@@ -72,6 +74,7 @@ const rest = new REST({ version: '10' }).setToken(discordToken);
 const inviteSnapshots = new Map();
 const inviteTotals = new Map();
 const inFlightGuildTasks = new Map();
+const voiceReconnectTimers = new Map();
 
 function runGuildTaskOnce(taskKey, task) {
   const activeTask = inFlightGuildTasks.get(taskKey);
@@ -86,6 +89,55 @@ function runGuildTaskOnce(taskKey, task) {
     () => { if (inFlightGuildTasks.get(taskKey) === currentTask) inFlightGuildTasks.delete(taskKey); }
   );
   return currentTask;
+}
+
+function getConfiguredBotVoiceChannel(guild) {
+  return guild?.channels.cache.find((channel) =>
+    channel.type === ChannelType.GuildVoice && channel.name === BOT_VOICE_CHANNEL_NAME
+  ) || null;
+}
+
+function scheduleBotVoiceReconnect(guild) {
+  if (!guild || voiceReconnectTimers.has(guild.id)) return;
+  const timer = setTimeout(() => {
+    voiceReconnectTimers.delete(guild.id);
+    keepBotInConfiguredVoiceChannel(guild).catch((error) => console.error('Bot ses yeniden bağlanma hatası:', error.message));
+  }, 5000);
+  timer.unref?.();
+  voiceReconnectTimers.set(guild.id, timer);
+}
+
+async function keepBotInConfiguredVoiceChannel(guild) {
+  const target = getConfiguredBotVoiceChannel(guild);
+  if (!target || !guild.voiceAdapterCreator) return null;
+  const existing = getVoiceConnection(guild.id);
+  if (existing?.joinConfig?.channelId === target.id) return existing;
+  existing?.destroy();
+
+  const connection = joinVoiceChannel({
+    channelId: target.id,
+    guildId: guild.id,
+    adapterCreator: guild.voiceAdapterCreator,
+    selfDeaf: true,
+    selfMute: true,
+  });
+  connection.on(VoiceConnectionStatus.Disconnected, async () => {
+    try {
+      await entersState(connection, VoiceConnectionStatus.Signalling, 5000);
+    } catch {
+      connection.destroy();
+      scheduleBotVoiceReconnect(guild);
+    }
+  });
+  connection.on(VoiceConnectionStatus.Destroyed, () => scheduleBotVoiceReconnect(guild));
+  try {
+    await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+  } catch (error) {
+    connection.destroy();
+    scheduleBotVoiceReconnect(guild);
+    console.error('Bot ses kanalına bağlanamadı:', error.message);
+  }
+  return connection;
 }
 
 function getGuildInviteTotals(guildId) {
@@ -1044,6 +1096,7 @@ client.on(Events.ClientReady, async () => {
       restorePrivateRoomOwners(guild);
       // Özel odalar artık ayrı metin kanalı oluşturmaz; tek panel #özel-oda kanalındadır.
       await ensureRoomMenu(guild);
+      await keepBotInConfiguredVoiceChannel(guild);
       await ensureRoleMenu(guild);
     } catch (error) {
       printError(`[${guild.name}] başlangıç ayarı tamamlanamadı`, error);
@@ -1385,6 +1438,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   if (!newState.guild) return;
+  if (newState.id === client.user?.id) {
+    const target = getConfiguredBotVoiceChannel(newState.guild);
+    if (target && newState.channelId !== target.id) {
+      await keepBotInConfiguredVoiceChannel(newState.guild);
+    }
+  }
   await ensurePrivateRoomForTrigger(oldState, newState);
   await checkPrivateRoomAutoClose(oldState, newState);
 });
