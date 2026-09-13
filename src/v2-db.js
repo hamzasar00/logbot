@@ -253,14 +253,17 @@ function clearWarnings(guildId, userId) {
 
 function recordStat(guildId, key, amount = 1, userId = null) {
   const stats = getGuild(guildId).stats;
-  if (!stats.enabled) return;
+  const leaderboardKey = userId && ['messages', 'voiceMinutes', 'invites'].includes(key);
+  // İstatistik raporu kapalı kalsa da leaderboard için kullanıcı metriklerini tut.
+  if (!stats.enabled && !leaderboardKey) return;
   if (typeof stats[key] !== 'number') stats[key] = 0;
   stats[key] += amount;
-  if (userId && ['messages', 'voiceMinutes', 'invites'].includes(key)) {
+  if (leaderboardKey) {
     if (!isPlainObject(stats.users[userId])) stats.users[userId] = { messages: 0, voiceMinutes: 0, invites: 0 };
     if (typeof stats.users[userId][key] !== 'number') stats.users[userId][key] = 0;
     stats.users[userId][key] += amount;
   }
+  if (!stats.enabled) return;
   const day = new Date().toISOString().slice(0, 10);
   if (!stats.days[day] || typeof stats.days[day] !== 'object') stats.days[day] = { messages: 0, joins: 0, leaves: 0, voiceMinutes: 0 };
   if (typeof stats.days[day][key] !== 'number') stats.days[day][key] = 0;
