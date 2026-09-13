@@ -451,7 +451,6 @@ async function ensureRoomMenuInternal(guild) {
   const existingMessage = messages?.find((message) => message.author.id === client.user.id && [
     '🎧 Özel Oda Oluşturma',
     'Özel Oda Sistemi',
-    '# MOREA Özel Oda Kontrol Paneli',
   ].includes(message.embeds[0]?.title));
   const payload = { embeds: [buildRoomManagementEmbed()], components: buildRoomManagementComponents() };
   if (existingMessage) await existingMessage.edit(payload);
@@ -712,8 +711,7 @@ async function ensureRoomManagementPanel(controlChannel, voiceChannel, roomInfo)
     message.author.id === client.user.id && [
       '🎧 Oda Yönetimi',
       'Özel Oda Sistemi',
-      '# MOREA Özel Oda Kontrol Paneli',
-    ].includes(message.embeds[0]?.title)
+      ].includes(message.embeds[0]?.title)
   );
   const payload = {
     embeds: [buildRoomManagementEmbed(roomInfo, voiceChannel)],
