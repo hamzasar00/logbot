@@ -398,7 +398,6 @@ async function statsCommand(context) {
     return respond(context, { content: '✅ İstatistik toplama ' + (action === 'ac' ? 'açıldı.' : 'kapatıldı.'), ephemeral: true });
   }
   const config = getGuild(guild.id).stats;
-  if (!config.enabled) return respond(context, { content: 'İstatistikler kapalı. Yönetici `.istatistik ac` komutuyla açabilir.', ephemeral: true });
   const days = isInteraction(context) ? context.options.getInteger('gun') || 7 : Math.min(30, Math.max(1, Number(argsOf(context)[0]) || 7));
   const stats = getStats(guild.id, days);
   const daily = stats.days.length ? stats.days.map(([day, value]) => day + ': ' + value.messages + ' mesaj, ' + value.joins + ' katılım, ' + value.leaves + ' ayrılma').join('\n') : 'Henüz günlük kayıt yok.';
@@ -801,7 +800,6 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
       await snapshotInvites(guild);
       await rest.put('/applications/' + client.user.id + '/guilds/' + guild.id + '/commands', { body: slashCommands })
         .catch((error) => printError('V3 slash komutları kaydedilemedi', error));
-      updateGuildSection(guild.id, 'stats', { enabled: false });
       await ensureLeaderboardPanel(guild).catch((error) => console.error('Leaderboard paneli kurulamadı:', error.message));
     }
     printSuccess('V3 modülleri hazır • moderasyon • hoş geldin • özel oda • istatistik • seviye • slash komutları');
