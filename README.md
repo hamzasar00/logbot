@@ -418,6 +418,8 @@ Kayıt tamamlandığında kayıtsız rolü kaldırılır, seçilen cinsiyet rol�
 - Seviye değeri artık kayıtlı değerden değil, toplam XP üzerinden yeniden hesaplanır.
 
 
-## Slash komutları
+## v4-clean komut kapsamı
 
-Ana bot komutlarının tamamı slash olarak kullanılabilir: `/setup`, `/log`, `/oda`, `/roller`, `/roller-menu`, `/roller-ekle`, `/roller-sil`, `/boost-kanal`, `/boost-gif`, `/boost-test`, `/boost-baslik`, `/boost-mesaj` ve `/help`. Eski nokta prefixleri geriye dönük uyumluluk için korunur.
+Bu dal log botundan ayrıdır. Log kanalları, otomatik log eventleri, boost log ayarları, `/setup` ve `/log` bu dalda bulunmaz.
+
+Korunan ana özellikler: register, moderasyon, seviye/XP, leaderboard ve özel ses odaları. Slash komutları arasında `/register`, `/register-roller`, `/uyar`, `/filtre`, `/leaderboard`, `/seviye`, `/blackjack`, `/oda`, `/oda-devret`, `/oda-kilitle`, `/oda-limit`, `/roller` ve `/help` bulunur.
