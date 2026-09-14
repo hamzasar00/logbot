@@ -36,7 +36,7 @@ function createGuildDefaults() {
     },
     blackjack: { channelId: null },
     economy: { currencyName: 'çip', startingBalance: 1000, dailyReward: 500, users: {} },
-    registration: { roleIds: { unregistered: null, female: null, male: null }, users: {} },
+    registration: { roleIds: { unregistered: null, female: null, male: null }, staffRoleIds: [], users: {} },
   };
 }
 
@@ -159,6 +159,8 @@ function normalizeGuild(value) {
   for (const key of ['unregistered', 'female', 'male']) {
     if (guild.registration.roleIds[key] !== null && typeof guild.registration.roleIds[key] !== 'string') guild.registration.roleIds[key] = null;
   }
+  if (!Array.isArray(guild.registration.staffRoleIds)) guild.registration.staffRoleIds = [];
+  guild.registration.staffRoleIds = guild.registration.staffRoleIds.filter((roleId) => /^\d{5,25}$/.test(String(roleId)));
   if (!isPlainObject(guild.registration.users)) guild.registration.users = {};
   for (const [userId, value] of Object.entries(guild.registration.users)) {
     if (!isPlainObject(value)) { delete guild.registration.users[userId]; continue; }
@@ -406,6 +408,24 @@ function setRegistrationRoles(guildId, roleIds) {
   return registration.roleIds;
 }
 
+function getRegistrationStaffRoleIds(guildId) {
+  return [...getRegistrationConfig(guildId).staffRoleIds];
+}
+
+function addRegistrationStaffRole(guildId, roleId) {
+  const registration = getRegistrationConfig(guildId);
+  if (!registration.staffRoleIds.includes(roleId)) registration.staffRoleIds.push(roleId);
+  saveState();
+  return [...registration.staffRoleIds];
+}
+
+function removeRegistrationStaffRole(guildId, roleId) {
+  const registration = getRegistrationConfig(guildId);
+  registration.staffRoleIds = registration.staffRoleIds.filter((id) => id !== roleId);
+  saveState();
+  return [...registration.staffRoleIds];
+}
+
 function saveRegistration(guildId, userId, data) {
   const registration = getRegistrationConfig(guildId);
   const record = {
@@ -422,4 +442,4 @@ function saveRegistration(guildId, userId, data) {
 loadState();
 saveState();
 
-module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, getLevelConfig, addLevelXp, getLevelUser, getLevelLeaderboard, setLevelReward, removeLevelReward, xpForLevel, getEconomy, getBalance, changeBalance, claimDaily, getRegistrationConfig, getRegistrationUser, setRegistrationRoles, saveRegistration, saveState };
+module.exports = { getGuild, updateGuildSection, addWarning, getWarnings, clearWarnings, recordStat, getLeaderboard, getStats, getLevelConfig, addLevelXp, getLevelUser, getLevelLeaderboard, setLevelReward, removeLevelReward, xpForLevel, getEconomy, getBalance, changeBalance, claimDaily, getRegistrationConfig, getRegistrationUser, getRegistrationStaffRoleIds, setRegistrationRoles, addRegistrationStaffRole, removeRegistrationStaffRole, saveRegistration, saveState };
