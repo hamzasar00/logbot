@@ -689,7 +689,20 @@ async function roomCommand(context, action) {
 }
 
 async function getConfiguredRole(guild, roleId) {
+  if (!roleId) return null;
   return guild.roles.cache.get(roleId) || await guild.roles.fetch(roleId).catch(() => null);
+}
+
+function canManageRegistrationRole(guild, role) {
+  const me = guild.members.me;
+  return Boolean(
+    role &&
+    !role.managed &&
+    role.id !== guild.id &&
+    me &&
+    me.permissions.has(PermissionsBitField.Flags.ManageRoles) &&
+    me.roles.highest.comparePositionTo(role) > 0
+  );
 }
 
 async function registrationRolesCommand(context) {
@@ -701,11 +714,18 @@ async function registrationRolesCommand(context) {
     female: context.options.getRole('kadin'),
     male: context.options.getRole('erkek'),
   };
+  if (Object.values(roles).some((role) => !role)) {
+    return respond(context, { content: 'Kayıtsız, kadın ve erkek rollerinin üçünü de seçmelisin.', ephemeral: true });
+  }
   if (new Set(Object.values(roles).map((role) => role.id)).size !== 3) {
     return respond(context, { content: 'Kayıtsız, kadın ve erkek rolleri birbirinden farklı olmalı.', ephemeral: true });
   }
-  if (Object.values(roles).some((role) => !role.editable)) {
-    return respond(context, { content: 'Bu rollerden biri botun en yüksek rolünün üstünde. Bot rolünü hedef rollerin üstüne taşı.', ephemeral: true });
+  const me = guild.members.me;
+  if (!me?.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+    return respond(context, { content: 'Botta Rolleri Yönet izni yok. Bu izni verip komutu tekrar çalıştır.', ephemeral: true });
+  }
+  if (Object.values(roles).some((role) => !canManageRegistrationRole(guild, role))) {
+    return respond(context, { content: 'Rollerden biri bot tarafından yönetilemiyor. Roller botun en yüksek rolünün altında olmalı ve entegrasyon rolü olmamalı.', ephemeral: true });
   }
   setRegistrationRoles(guild.id, Object.fromEntries(Object.entries(roles).map(([key, role]) => [key, role.id])));
   return respond(context, { content: '✅ Kayıt rolleri ayarlandı. Kayıtsız: ' + roles.unregistered + ' | Kadın: ' + roles.female + ' | Erkek: ' + roles.male, ephemeral: true });
@@ -715,9 +735,10 @@ async function registerCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
   const user = context.user;
+  if (!user || user.bot) return respond(context, { content: 'Bot hesapları kayıt olamaz.', ephemeral: true });
   const member = context.member || await memberOf(guild, user.id);
   if (!member) return respond(context, { content: 'Sunucu üye kaydın alınamadı.', ephemeral: true });
-  const name = context.options.getString('isim', true).trim();
+  const name = context.options.getString('isim', true).trim().replace(/\s+/g, ' ');
   const age = context.options.getInteger('yas', true);
   const gender = context.options.getString('cinsiyet', true);
   if (name.length < 2 || name.length > 32 || /[\r\n]/.test(name)) return respond(context, { content: 'İsim 2-32 karakter arasında olmalı.', ephemeral: true });
@@ -729,19 +750,32 @@ async function registerCommand(context) {
   const targetRole = await getConfiguredRole(guild, roleIds[gender]);
   const unregisteredRole = await getConfiguredRole(guild, roleIds.unregistered);
   const otherRole = await getConfiguredRole(guild, roleIds[gender === 'female' ? 'male' : 'female']);
-  if (!targetRole || !unregisteredRole || !otherRole) return respond(context, { content: 'Kayıt rollerinden biri artık bulunamıyor. Bir yönetici /register-roller ile tekrar ayarlamalı.', ephemeral: true });
-  if ([targetRole, unregisteredRole, otherRole].some((role) => !role.editable)) return respond(context, { content: 'Kayıt rollerinden biri bot tarafından yönetilemiyor. Bot rolünü hedef rollerin üstüne taşı.', ephemeral: true });
+  const roles = [targetRole, unregisteredRole, otherRole];
+  if (roles.some((role) => !role)) return respond(context, { content: 'Kayıt rollerinden biri artık bulunamıyor. Bir yönetici /register-roller ile tekrar ayarlamalı.', ephemeral: true });
+  const me = guild.members.me;
+  if (!me?.permissions.has(PermissionsBitField.Flags.ManageRoles)) return respond(context, { content: 'Botta Rolleri Yönet izni yok. Yönetici bu izni verip tekrar denemeli.', ephemeral: true });
+  if (!member.manageable || member.id === guild.ownerId) return respond(context, { content: 'Bu üyenin rollerini bot değiştiremiyor. Botun rolünü yükselt veya sunucu sahibini kayıt etmeye çalışma.', ephemeral: true });
+  if (roles.some((role) => !canManageRegistrationRole(guild, role))) return respond(context, { content: 'Kayıt rollerinden biri bot tarafından yönetilemiyor. Bot rolünü hedef rollerin üstüne taşı.', ephemeral: true });
   try {
-    if (member.roles.cache.has(unregisteredRole.id)) await member.roles.remove(unregisteredRole.id);
-    if (member.roles.cache.has(otherRole.id)) await member.roles.remove(otherRole.id);
-    if (!member.roles.cache.has(targetRole.id)) await member.roles.add(targetRole.id);
+    if (!member.roles.cache.has(targetRole.id)) await member.roles.add(targetRole, 'Kayıt sistemi: cinsiyet rolü');
+    if (member.roles.cache.has(unregisteredRole.id)) await member.roles.remove(unregisteredRole, 'Kayıt sistemi: kayıt tamamlandı');
+    if (member.roles.cache.has(otherRole.id)) await member.roles.remove(otherRole, 'Kayıt sistemi: eski cinsiyet rolü');
   } catch (error) {
     console.error('Kayıt rolü verilemedi:', error);
-    return respond(context, { content: 'Roller verilemedi. Botun rol yönetme iznini ve rol sırasını kontrol et.', ephemeral: true });
+    return respond(context, { content: 'Roller verilemedi. Botun Rolleri Yönet iznini, rol sırasını ve üyenin yönetilebilir olduğunu kontrol et.', ephemeral: true });
   }
   const previous = getRegistrationUser(guild.id, user.id);
   const record = saveRegistration(guild.id, user.id, { name, age, gender });
   return respond(context, { content: (previous ? '✅ Kayıt bilgilerin güncellendi.' : '✅ Kayıt tamamlandı.') + '\nİsim: **' + record.name + '** | Yaş: **' + record.age + '** | Rol: ' + targetRole, ephemeral: true });
+}
+
+async function registrationStatusCommand(context) {
+  const guild = guildOf(context);
+  if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  const record = getRegistrationUser(guild.id, context.user.id);
+  if (!record) return respond(context, { content: 'Bu sunucuda kayıtlı bir bilgin bulunmuyor. Kayıt olmak için /register komutunu kullan.', ephemeral: true });
+  const genderLabel = record.gender === 'female' ? 'Kadın' : 'Erkek';
+  return respond(context, { content: '📋 Kayıt bilgilerin\nİsim: **' + record.name + '**\nYaş: **' + record.age + '**\nCinsiyet: **' + genderLabel + '**\nKayıt tarihi: <t:' + Math.floor(new Date(record.registeredAt).getTime() / 1000) + ':F>', ephemeral: true });
 }
 const slashCommands = [
   { name: 'oda', description: 'Özel oda menüsünü gösterir' },
@@ -753,6 +787,7 @@ const slashCommands = [
   { name: 'roller-menu', description: 'Rol menüsünü hazırlar' },
   { name: 'register', description: 'Sunucu kaydını tamamlar', options: [{ name: 'isim', description: 'Kullanılacak isim', type: 3, required: true, min_length: 2, max_length: 32 }, { name: 'yas', description: 'Yaşın', type: 4, required: true, min_value: 13, max_value: 100 }, { name: 'cinsiyet', description: 'Kadın veya erkek', type: 3, required: true, choices: [{ name: 'Kadın', value: 'female' }, { name: 'Erkek', value: 'male' }] }] },
   { name: 'register-roller', description: 'Kayıt rollerini ayarlar', options: [{ name: 'kayitsiz', description: 'Kayıtsız rolü', type: 8, required: true }, { name: 'kadin', description: 'Kadın rolü', type: 8, required: true }, { name: 'erkek', description: 'Erkek rolü', type: 8, required: true }] },
+  { name: 'register-bilgi', description: 'Kayıt bilgilerini gösterir' },
   { name: 'uyar', description: 'Kullanıcıya uyarı verir', options: [{ name: 'user', description: 'Uyarılacak kullanıcı', type: 6, required: true }, { name: 'sebep', description: 'Sebep', type: 3, required: true }] },
   { name: 'uyarilar', description: 'Uyarıları gösterir', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
   { name: 'uyarisil', description: 'Uyarıları temizler', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
@@ -795,6 +830,7 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'filtre') return await filterCommand(interaction, interaction.options.getString('eylem'), interaction.options.getString('kelime'));
       if (name === 'register') return await registerCommand(interaction);
       if (name === 'register-roller') return await registrationRolesCommand(interaction);
+      if (name === 'register-bilgi') return await registrationStatusCommand(interaction);
       if (name === 'hosgeldin') return await welcomeCommand(interaction);
       if (name === 'istatistik') return await statsCommand(interaction);
       if (name === 'leaderboard') return await leaderboardCommand(interaction);
