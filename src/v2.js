@@ -26,7 +26,10 @@ const {
   xpForLevel,
   getRegistrationConfig,
   getRegistrationUser,
+  getRegistrationStaffRoleIds,
   setRegistrationRoles,
+  addRegistrationStaffRole,
+  removeRegistrationStaffRole,
   saveRegistration,
   saveState,
 } = require('./v2-db');
@@ -46,6 +49,14 @@ function isManager(member) {
     member?.permissions?.has(PermissionsBitField.Flags.Administrator) ||
     member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)
   );
+}
+
+function hasRegistrationStaffRole(member, roleIds) {
+  return roleIds.some((roleId) => member?.roles?.cache?.has(roleId));
+}
+
+function canUseStaffCommands(member, roleIds) {
+  return roleIds.length > 0 ? hasRegistrationStaffRole(member, roleIds) : isManager(member);
 }
 
 async function respond(context, payload) {
@@ -150,8 +161,9 @@ async function temporaryMessage(channel, content) {
 async function warningCommand(context, action) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
-  if (!isManager(context.member)) {
-    return respond(context, { content: 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+  const staffRoleIds = getRegistrationStaffRoleIds(guild.id);
+  if (!canUseStaffCommands(context.member, staffRoleIds)) {
+    return respond(context, { content: staffRoleIds.length > 0 ? 'Bu moderasyon komutu için kayıt yetkilisi rollerinden birine sahip olmalısın.' : 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
   }
   const target = targetOf(context);
   if (!target) return respond(context, { content: 'Bir kullanıcı belirtmelisin.', ephemeral: true });
@@ -186,8 +198,9 @@ async function warningCommand(context, action) {
 async function filterCommand(context, action, suppliedWord) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
-  if (!isManager(context.member)) {
-    return respond(context, { content: 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+  const staffRoleIds = getRegistrationStaffRoleIds(guild.id);
+  if (!canUseStaffCommands(context.member, staffRoleIds)) {
+    return respond(context, { content: staffRoleIds.length > 0 ? 'Bu moderasyon komutu için kayıt yetkilisi rollerinden birine sahip olmalısın.' : 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
   }
   const config = getGuild(guild.id).moderation;
   const normalizedAction = { link: 'links', invite: 'invites' }[action] || action;
@@ -734,10 +747,12 @@ async function registrationRolesCommand(context) {
 async function registerCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
-  const selectedUser = context.options.getUser('user');
-  if (selectedUser && !isManager(context.member)) {
-    return respond(context, { content: 'Başka bir üyeyi kaydetmek için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+  const staffRoleIds = getRegistrationStaffRoleIds(guild.id);
+  const canRegister = canUseStaffCommands(context.member, staffRoleIds);
+  if (!canRegister) {
+    return respond(context, { content: staffRoleIds.length > 0 ? 'Kayıt yapmak için belirlenmiş kayıt yetkilisi rollerinden birine sahip olmalısın.' : 'Kayıt sistemi henüz yetkili rolüyle ayarlanmamış. Bir yönetici /register-yetkili ile rol tanımlamalı.', ephemeral: true });
   }
+  const selectedUser = context.options.getUser('user');
   const user = selectedUser || context.user;
   if (!user || user.bot) return respond(context, { content: 'Bot hesapları kayıt olamaz.', ephemeral: true });
   const member = selectedUser ? await memberOf(guild, user.id) : (context.member || await memberOf(guild, user.id));
@@ -773,6 +788,26 @@ async function registerCommand(context) {
   return respond(context, { content: (previous ? '✅ Kayıt bilgilerin güncellendi.' : '✅ Kayıt tamamlandı.') + '\nİsim: **' + record.name + '** | Yaş: **' + record.age + '** | Rol: ' + targetRole, ephemeral: true });
 }
 
+async function registrationStaffRoleCommand(context) {
+  const guild = guildOf(context);
+  if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
+  if (!isManager(context.member)) return respond(context, { content: 'Bu işlem için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+  const action = context.options.getString('eylem', true);
+  const role = context.options.getRole('rol');
+  if (action === 'liste') {
+    const roleIds = getRegistrationStaffRoleIds(guild.id);
+    return respond(context, { content: roleIds.length ? '✅ Kayıt yapabilecek roller: ' + roleIds.map((id) => '<@&' + id + '>').join(', ') : 'Henüz kayıt yetkilisi rolü tanımlanmadı. /register-yetkili eylem:ekle rol:@Rol kullan.', ephemeral: true });
+  }
+  if (!role) return respond(context, { content: 'Ekleme veya silme için bir rol seçmelisin.', ephemeral: true });
+  if (role.managed || role.id === guild.id) return respond(context, { content: 'Entegrasyon veya everyone rolü kayıt yetkilisi olamaz.', ephemeral: true });
+  if (action === 'ekle') {
+    addRegistrationStaffRole(guild.id, role.id);
+    return respond(context, { content: '✅ ' + role + ' artık kayıt yapabilir.', ephemeral: true });
+  }
+  removeRegistrationStaffRole(guild.id, role.id);
+  return respond(context, { content: '✅ ' + role + ' kayıt yetkilisi listesinden çıkarıldı.', ephemeral: true });
+}
+
 async function registrationStatusCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
@@ -792,6 +827,7 @@ const slashCommands = [
   { name: 'register', description: 'Sunucu kaydını tamamlar', options: [{ name: 'user', description: 'Kaydedilecek üye (yönetici)', type: 6, required: false }, { name: 'isim', description: 'Kullanılacak isim', type: 3, required: true, min_length: 2, max_length: 32 }, { name: 'yas', description: 'Yaşın', type: 4, required: true, min_value: 13, max_value: 100 }, { name: 'cinsiyet', description: 'Kadın veya erkek', type: 3, required: true, choices: [{ name: 'Kadın', value: 'female' }, { name: 'Erkek', value: 'male' }] }] },
   { name: 'register-roller', description: 'Kayıt rollerini ayarlar', options: [{ name: 'kayitsiz', description: 'Kayıtsız rolü', type: 8, required: true }, { name: 'kadin', description: 'Kadın rolü', type: 8, required: true }, { name: 'erkek', description: 'Erkek rolü', type: 8, required: true }] },
   { name: 'register-bilgi', description: 'Kayıt bilgilerini gösterir' },
+  { name: 'register-yetkili', description: 'Kayıt yapabilecek rolleri yönetir', options: [{ name: 'eylem', description: 'Yapılacak işlem', type: 3, required: true, choices: [{ name: 'Ekle', value: 'ekle' }, { name: 'Sil', value: 'sil' }, { name: 'Listele', value: 'liste' }] }, { name: 'rol', description: 'Kayıt yetkilisi rolü', type: 8, required: false }] },
   { name: 'uyar', description: 'Kullanıcıya uyarı verir', options: [{ name: 'user', description: 'Uyarılacak kullanıcı', type: 6, required: true }, { name: 'sebep', description: 'Sebep', type: 3, required: true }] },
   { name: 'uyarilar', description: 'Uyarıları gösterir', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
   { name: 'uyarisil', description: 'Uyarıları temizler', options: [{ name: 'user', description: 'Kullanıcı', type: 6, required: true }] },
@@ -835,6 +871,7 @@ function initializeV3({ client, rest, sendLog, commandHandlers = {} }) {
       if (name === 'register') return await registerCommand(interaction);
       if (name === 'register-roller') return await registrationRolesCommand(interaction);
       if (name === 'register-bilgi') return await registrationStatusCommand(interaction);
+      if (name === 'register-yetkili') return await registrationStaffRoleCommand(interaction);
       if (name === 'hosgeldin') return await welcomeCommand(interaction);
       if (name === 'istatistik') return await statsCommand(interaction);
       if (name === 'leaderboard') return await leaderboardCommand(interaction);
