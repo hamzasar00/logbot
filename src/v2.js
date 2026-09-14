@@ -734,10 +734,14 @@ async function registrationRolesCommand(context) {
 async function registerCommand(context) {
   const guild = guildOf(context);
   if (!guild) return respond(context, { content: 'Bu komut bir sunucuda kullanılmalıdır.', ephemeral: true });
-  const user = context.user;
+  const selectedUser = context.options.getUser('user');
+  if (selectedUser && !isManager(context.member)) {
+    return respond(context, { content: 'Başka bir üyeyi kaydetmek için Sunucuyu Yönet veya Yönetici yetkisi gerekir.', ephemeral: true });
+  }
+  const user = selectedUser || context.user;
   if (!user || user.bot) return respond(context, { content: 'Bot hesapları kayıt olamaz.', ephemeral: true });
-  const member = context.member || await memberOf(guild, user.id);
-  if (!member) return respond(context, { content: 'Sunucu üye kaydın alınamadı.', ephemeral: true });
+  const member = selectedUser ? await memberOf(guild, user.id) : (context.member || await memberOf(guild, user.id));
+  if (!member) return respond(context, { content: 'Seçilen üye bu sunucuda bulunamadı.', ephemeral: true });
   const name = context.options.getString('isim', true).trim().replace(/\s+/g, ' ');
   const age = context.options.getInteger('yas', true);
   const gender = context.options.getString('cinsiyet', true);
@@ -785,7 +789,7 @@ const slashCommands = [
   { name: 'roller-ekle', description: 'Rol menüsüne rol ekler', options: [{ name: 'rol', description: 'Eklenecek rol', type: 8, required: true }, { name: 'kategori', description: 'Rol kategorisi', type: 3, choices: [{ name: 'Etkinlik', value: 'event' }, { name: 'Renk', value: 'color' }, { name: 'Burç', value: 'zodiac' }, { name: 'Oyun', value: 'game' }, { name: 'Takım', value: 'team' }, { name: 'Genel', value: 'general' }] }] },
   { name: 'roller-sil', description: 'Rol menüsünden rol çıkarır', options: [{ name: 'rol', description: 'Çıkarılacak rol', type: 8, required: true }] },
   { name: 'roller-menu', description: 'Rol menüsünü hazırlar' },
-  { name: 'register', description: 'Sunucu kaydını tamamlar', options: [{ name: 'isim', description: 'Kullanılacak isim', type: 3, required: true, min_length: 2, max_length: 32 }, { name: 'yas', description: 'Yaşın', type: 4, required: true, min_value: 13, max_value: 100 }, { name: 'cinsiyet', description: 'Kadın veya erkek', type: 3, required: true, choices: [{ name: 'Kadın', value: 'female' }, { name: 'Erkek', value: 'male' }] }] },
+  { name: 'register', description: 'Sunucu kaydını tamamlar', options: [{ name: 'user', description: 'Kaydedilecek üye (yönetici)', type: 6, required: false }, { name: 'isim', description: 'Kullanılacak isim', type: 3, required: true, min_length: 2, max_length: 32 }, { name: 'yas', description: 'Yaşın', type: 4, required: true, min_value: 13, max_value: 100 }, { name: 'cinsiyet', description: 'Kadın veya erkek', type: 3, required: true, choices: [{ name: 'Kadın', value: 'female' }, { name: 'Erkek', value: 'male' }] }] },
   { name: 'register-roller', description: 'Kayıt rollerini ayarlar', options: [{ name: 'kayitsiz', description: 'Kayıtsız rolü', type: 8, required: true }, { name: 'kadin', description: 'Kadın rolü', type: 8, required: true }, { name: 'erkek', description: 'Erkek rolü', type: 8, required: true }] },
   { name: 'register-bilgi', description: 'Kayıt bilgilerini gösterir' },
   { name: 'uyar', description: 'Kullanıcıya uyarı verir', options: [{ name: 'user', description: 'Uyarılacak kullanıcı', type: 6, required: true }, { name: 'sebep', description: 'Sebep', type: 3, required: true }] },
